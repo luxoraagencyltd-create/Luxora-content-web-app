@@ -51,6 +51,7 @@ export interface Task {
   seeding?: string;
   contentBody?: string; // Nội dung bài
   image?: string;       // Hình
+  tab?: '05' | '06';
 }
 
 export interface Issue {

@@ -2,11 +2,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Task, ReviewMessage, LogEntry, Project, User, Issue } from './types';
 import { db } from './lib/firebase';
-import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
 import Sidebar from './components/Sidebar';
 import SheetSimulator from './components/SheetSimulator';
 import ReviewPortal from './components/ReviewPortal';
-import WorkflowVisualizer from './components/WorkflowVisualizer';
+// removed unused WorkflowVisualizer import
 import LogPanel from './components/LogPanel';
 import Login from './components/Login';
 import AdminPanel from './components/AdminPanel';
@@ -35,9 +35,34 @@ const App: React.FC = () => {
 
   // 1. Lấy dữ liệu Real-time từ Firebase cho Users và Projects
   useEffect(() => {
-    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+    const unsubUsers = onSnapshot(collection(db, 'users'), async (snapshot) => {
       const usersData = snapshot.docs.map(doc => doc.data() as User);
       setUsers(usersData);
+
+      // If collection is empty, seed with sample users for testing
+      if (usersData.length === 0) {
+        try {
+          const sampleUsers: User[] = [
+            { id: 'admin', username: 'admin', role: 'ADMIN', company: 'Sample', password: '123', fullName: 'Administrator' },
+            { id: 'staff1', username: 'staff1', role: 'STAFF', company: 'Sample', password: '123', fullName: 'Staff One' },
+            { id: 'staff2', username: 'staff2', role: 'STAFF', company: 'Sample', password: '123', fullName: 'Staff Two' },
+            { id: 'staff3', username: 'staff3', role: 'STAFF', company: 'Sample', password: '123', fullName: 'Staff Three' },
+            { id: 'client1', username: 'client1', role: 'CLIENT', company: 'Sample', password: '123', fullName: 'Client One' },
+            { id: 'client2', username: 'client2', role: 'CLIENT', company: 'Sample', password: '123', fullName: 'Client Two' },
+            { id: 'client3', username: 'client3', role: 'CLIENT', company: 'Sample', password: '123', fullName: 'Client Three' }
+          ];
+
+          for (const u of sampleUsers) {
+            await setDoc(doc(db, 'users', u.id), u);
+          }
+
+          // Create a sample group/document to collect staff+client IDs for easy sharing
+          const sampleMemberIds = sampleUsers.filter(s => s.role !== 'ADMIN').map(s => s.id);
+          await setDoc(doc(db, 'samples', 'test-users'), { memberIds: sampleMemberIds });
+        } catch (err) {
+          console.error('Seeding sample users failed:', err);
+        }
+      }
     });
     const unsubProjects = onSnapshot(collection(db, 'projects'), (snapshot) => {
       const projectsData = snapshot.docs.map(doc => doc.data() as Project);
@@ -61,54 +86,57 @@ const App: React.FC = () => {
       const result = await response.json();
       
       if (result.tasks05) {
-        const t05 = result.tasks05.map((row: any) => ({
-          id: row.id || row['ID task'],
+        const t05 = result.tasks05.map((row: Record<string, unknown>) => ({
+          id: String(row['id'] ?? row['ID task'] ?? ''),
           projectId: selectedProjectId,
           phase: row.phase || row['Giai đoạn (Phase)'],
-          name: row.name || row['Tên công việc (Task Name)'],
-          status: row.status || row['Trạng thái (Status)'],
-          priority: row.priority || row['Ưu tiên (Priority)'],
-          planStart: row.planStart || row['Plan Start'],
-          duration: parseInt(row.duration) || 0,
-          planEnd: row.planEnd || row['Plan End'],
-          link: row.link || '#',
-          staff: row.staff || row['Người thực hiện (Assignee)'],
-          feedbacks: row.feedbacks || [],
+          name: String(row['name'] ?? row['Tên công việc (Task Name)'] ?? ''),
+          status: String(row['status'] ?? row['Trạng thái (Status)'] ?? ''),
+          priority: String(row['priority'] ?? row['Ưu tiên (Priority)'] ?? ''),
+          planStart: String(row['planStart'] ?? row['Plan Start'] ?? ''),
+          duration: parseInt(String(row['duration'] ?? '0')) || 0,
+          planEnd: String(row['planEnd'] ?? row['Plan End'] ?? ''),
+          link: String(row['link'] ?? '#'),
+          staff: String(row['staff'] ?? row['Người thực hiện (Assignee)'] ?? ''),
+          feedbacks: Array.isArray(row['feedbacks']) ? (row['feedbacks'] as unknown[]).map(String) : [],
           tab: '05'
         }));
         
-        const t06 = (result.tasks06 || []).map((row: any) => ({
-          id: row.id || row['ID task'],
+        const t06 = (result.tasks06 || []).map((row: Record<string, unknown>) => ({
+          id: String(row['id'] ?? row['ID task'] ?? ''),
           projectId: selectedProjectId,
-          phase: row.type || row['Dạng content'],
-          planEnd: row.publishDate || row['Thời gian đăng'],
-          status: row.status || row['Status'],
-          pillar: row.pillar || row['Pillar'],
-          name: row.angle || row['Angle'],
-          link: row.link || row['Link bài đăng'],
-          seeding: row.seeding || row['Nội dung seeding'],
-          contentBody: row.content || row['Nội dung bài'],
-          image: row.image || row['Hình'],
-          feedbacks: row.feedbacks || [],
+          phase: String(row['type'] ?? row['Dạng content'] ?? ''),
+          planEnd: String(row['publishDate'] ?? row['Thời gian đăng'] ?? ''),
+          status: String(row['status'] ?? row['Status'] ?? ''),
+          pillar: String(row['pillar'] ?? row['Pillar'] ?? ''),
+          name: String(row['angle'] ?? row['Angle'] ?? ''),
+          link: String(row['link'] ?? row['Link bài đăng'] ?? ''),
+          seeding: String(row['seeding'] ?? row['Nội dung seeding'] ?? ''),
+          contentBody: String(row['content'] ?? row['Nội dung bài'] ?? ''),
+          image: String(row['image'] ?? row['Hình'] ?? ''),
+          feedbacks: Array.isArray(row['feedbacks']) ? (row['feedbacks'] as unknown[]).map(String) : [],
           tab: '06'
         }));
         setTasks([...t05, ...t06]);
       }
 
       if (Array.isArray(result.issues)) {
-        setIssues(result.issues.map((row: any) => ({
-          id: row.id || row['ID'],
-          type: row.type || row['Loại (Type)'],
-          summary: row.summary || row['Tên vấn đề (Issue Summary)'],
-          severity: row.severity || row['Mức độ (Severity)'],
-          owner: row.owner || row['Người chịu trách nhiệm (Owner)'],
-          status: row.status || row['Trạng thái (Status)'],
-          dateRaised: row.dateRaised || row['Ngày phát hiện (Date Raised)'],
-          dueDate: row.dueDate || row['Hạn xử lý (Due Date)'],
-          closedDate: row.closedDate || row['Ngày đóng (Closed Date)'],
-          overdue: parseInt(row.overdue) || 0,
-          daysOpen: parseInt(row.daysOpen) || 0,
-          solution: row.solution || row['Giải pháp / Ghi chú']
+        setIssues(result.issues.map((row: Record<string, unknown>) => ({
+          id: String(row['id'] ?? row['ID'] ?? ''),
+          type: String(row['type'] ?? row['Loại (Type)'] ?? ''),
+          summary: String(row['summary'] ?? row['Tên vấn đề (Issue Summary)'] ?? ''),
+          severity: (() => {
+            const s = String(row['severity'] ?? row['Mức độ (Severity)'] ?? 'Low');
+            return ['Critical', 'High', 'Medium', 'Low'].includes(s) ? (s as import('./types').Issue['severity']) : 'Low';
+          })(),
+          owner: String(row['owner'] ?? row['Người chịu trách nhiệm (Owner)'] ?? ''),
+          status: String(row['status'] ?? row['Trạng thái (Status)'] ?? ''),
+          dateRaised: String(row['dateRaised'] ?? row['Ngày phát hiện (Date Raised)'] ?? ''),
+          dueDate: String(row['dueDate'] ?? row['Hạn xử lý (Due Date)'] ?? ''),
+          closedDate: row['closedDate'] ? String(row['closedDate']) : undefined,
+          overdue: parseInt(String(row['overdue'] ?? '0')) || 0,
+          daysOpen: parseInt(String(row['daysOpen'] ?? '0')) || 0,
+          solution: row['solution'] ? String(row['solution']) : undefined
         })));
       }
       addLog("Dữ liệu thực địa đã được nạp thành công.", "SUCCESS");
@@ -182,14 +210,9 @@ const App: React.FC = () => {
   };
 
   const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
-  const currentTabTasks = useMemo(() => tasks.filter(t => (t as any).tab === activeTab), [tasks, activeTab]);
+  const currentTabTasks = useMemo(() => tasks.filter(t => t.tab === activeTab), [tasks, activeTab]);
 
-  const filteredTasks = useMemo(() => {
-    return currentTabTasks.filter(task => {
-      if (statusFilter && task.status !== statusFilter) return false;
-      return true;
-    });
-  }, [currentTabTasks, statusFilter]);
+  
 
   const stats = useMemo(() => ({
     done: tasks.filter(t => t.status === 'Done').length,

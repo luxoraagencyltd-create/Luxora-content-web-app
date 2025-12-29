@@ -17,10 +17,12 @@ const Login: React.FC<Props> = ({ onLogin, users }) => {
     setError('');
 
     // Kiểm tra danh tính dựa trên Username hoặc ID NODE
-    const matchedUser = users.find(u => 
-      (u.username.toLowerCase() === username.toLowerCase() || u.id.toLowerCase() === username.toLowerCase()) && 
-      u.password === password
-    );
+    const lookup = username.trim().toLowerCase();
+    const matchedUser = users.find(u => {
+      const uname = (u.username ?? '').toLowerCase();
+      const uid = (u.id ?? '').toLowerCase();
+      return (uname === lookup || uid === lookup) && (u.password ?? '') === password;
+    });
 
     if (matchedUser) {
       onLogin(matchedUser);
@@ -92,9 +94,9 @@ const Login: React.FC<Props> = ({ onLogin, users }) => {
         <div className="mt-12 text-center">
           <p className="code-font text-[#a39e93]/40 text-[8px] uppercase tracking-widest font-bold">Node Identities:</p>
           <div className="flex justify-center gap-4 mt-4 overflow-x-auto pb-2">
-            {users.map(u => (
-              <span key={u.id} className="text-[7px] code-font text-[#d4af37] opacity-60 hover:opacity-100 cursor-default uppercase">
-                {u.id}
+            {users.map((u, i) => (
+              <span key={u.id ?? u.username ?? i} className="text-[7px] code-font text-[#d4af37] opacity-60 hover:opacity-100 cursor-default uppercase">
+                {u.id ?? u.username}
               </span>
             ))}
           </div>

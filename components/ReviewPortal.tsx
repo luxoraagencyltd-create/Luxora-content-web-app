@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ReviewMessage, User, UserRole } from '../types';
+import { ReviewMessage, User } from '../types';
 
 interface Props {
   messages: ReviewMessage[];
@@ -31,7 +31,6 @@ const ReviewPortal: React.FC<Props> = ({ messages, users, currentUser, onAction,
     const value = e.target.value;
     setInputText(value);
 
-    const lastChar = value[value.length - 1];
     const words = value.split(' ');
     const lastWord = words[words.length - 1];
 

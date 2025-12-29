@@ -13,7 +13,7 @@ interface Props {
   unreadMessages?: number;
 }
 
-const Sidebar: React.FC<Props> = ({ onSettingsClick, currentProject, onLogout, activeView, setActiveView, userRole, onSwitchProject, unreadMessages = 0 }) => {
+const Sidebar: React.FC<Props> = ({ onSettingsClick: _onSettingsClick, currentProject, onLogout, activeView, setActiveView, userRole, onSwitchProject, unreadMessages = 0 }) => {
   const isAdmin = userRole === 'ADMIN';
   const isClient = userRole === 'CLIENT';
 

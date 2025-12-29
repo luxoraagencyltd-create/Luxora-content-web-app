@@ -18,8 +18,11 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
     return new Date(parseInt(y), mIdx, parseInt(d));
   };
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const today = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d;
+  }, []);
 
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
@@ -33,15 +36,15 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
   const activeIssues = useMemo(() => issues.filter(i => i.status !== 'Closed'), [issues]);
   const criticalIssuesCount = useMemo(() => activeIssues.filter(i => i.severity === 'Critical').length, [activeIssues]);
 
-  const statusConfigs = [
+  const statusConfigs = useMemo((): { id: string; label: string; color: string; icon: string }[] => [
     { id: 'To do', label: 'Todo', color: '#a39e93', icon: 'fa-list-ul' },
     { id: 'Doing', label: 'In Progress', color: '#f2ede4', icon: 'fa-spinner' },
     { id: 'Review', label: 'Review', color: '#d4af37', icon: 'fa-eye' },
     { id: 'Overdue', label: 'Trễ Deadline', color: '#c41e3a', icon: 'fa-triangle-exclamation' },
     { id: 'Done', label: 'Done', color: '#00f2ff', icon: 'fa-check-double' },
-  ];
+  ], []);
 
-  const getTaskStatus = (t: Task) => {
+  const getTaskStatus = React.useCallback((t: Task) => {
     if (t.status === 'Done') return 'Done';
     const dEnd = parseDate(t.planEnd);
     if (dEnd < today) return 'Overdue';
@@ -49,7 +52,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
     if (t.status === 'Doing' || t.status === 'In Progress') return 'Doing';
     if (t.status === 'Review' || t.status === 'Need Edit') return 'Review';
     return 'To do';
-  };
+  }, [today]);
 
   const tasksByStatus = useMemo(() => {
     const map: Record<string, Task[]> = {};
@@ -59,7 +62,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
       if (map[status]) map[status].push(t);
     });
     return map;
-  }, [filteredTasks]);
+  }, [filteredTasks, statusConfigs, getTaskStatus]);
 
   const totalFiltered = filteredTasks.length || 1;
   const stats = useMemo(() => {
@@ -68,7 +71,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
       count: tasksByStatus[cfg.id].length,
       percent: Math.round((tasksByStatus[cfg.id].length / totalFiltered) * 100)
     }));
-  }, [tasksByStatus, totalFiltered]);
+  }, [tasksByStatus, totalFiltered, statusConfigs]);
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -127,8 +130,12 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
                   const strokeDash = `${curr.percent} ${100 - curr.percent}`;
                   const offset = 100 - acc.totalPercent;
                   acc.totalPercent += curr.percent;
-                  return { ...acc, elements: [...acc.elements, <circle key={idx} cx="18" cy="18" r="15.915" fill="transparent" stroke={curr.color} strokeWidth="3" strokeDasharray={strokeDash} strokeDashoffset={offset} strokeLinecap="round" />] };
-                }, { totalPercent: 0, elements: [] as any }).elements}
+                  const circle = (
+                    <circle key={idx} cx="18" cy="18" r="15.915" fill="transparent" stroke={curr.color} strokeWidth="3" strokeDasharray={strokeDash} strokeDashoffset={offset} strokeLinecap="round" />
+                  );
+                  acc.elements.push(circle);
+                  return acc;
+                }, { totalPercent: 0, elements: [] as JSX.Element[] }).elements}
              </svg>
              <div className="absolute inset-0 flex flex-col items-center justify-center">
                 <span className="heritage-font text-5xl font-black text-white">{filteredTasks.length}</span>
@@ -170,10 +177,10 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
           </div>
 
           <div className="space-y-6 flex-1">
-             {['Critical', 'High', 'Medium', 'Low'].map(sev => {
-               const count = issues.filter(i => i.severity === sev).length;
-               const percent = issues.length > 0 ? Math.round((count/issues.length)*100) : 0;
-               const colors: any = { Critical: '#c41e3a', High: '#d4af37', Medium: '#8c7333', Low: '#a39e93' };
+            {['Critical', 'High', 'Medium', 'Low'].map(sev => {
+            const count = issues.filter(i => i.severity === sev).length;
+            const percent = issues.length > 0 ? Math.round((count/issues.length)*100) : 0;
+            const colors: Record<string, string> = { Critical: '#c41e3a', High: '#d4af37', Medium: '#8c7333', Low: '#a39e93' };
                return (
                  <div key={sev} className="space-y-2">
                    <div className="flex justify-between text-[9px] code-font font-bold uppercase tracking-widest text-[#a39e93]">
@@ -189,9 +196,9 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
           </div>
 
           <div className="mt-8 p-4 bg-[#c41e3a]/5 border border-[#c41e3a]/20 rounded-xl">
-             <p className="code-font text-[9px] text-[#f2ede4]/60 leading-relaxed">
+               <p className="code-font text-[9px] text-[#f2ede4]/60 leading-relaxed">
                <i className="fa-solid fa-circle-info mr-2 text-[#c41e3a]"></i>
-               Dữ liệu Issue được trích xuất trực tiếp từ tab <span className="text-[#c41e3a] font-bold">"Issue Log"</span>. Hội viên nên ưu tiên xem xét các sự cố Critical để tránh gián đoạn tiến độ chung.
+               Dữ liệu Issue được trích xuất trực tiếp từ tab <span className="text-[#c41e3a] font-bold">Issue Log</span>. Hội viên nên ưu tiên xem xét các sự cố Critical để tránh gián đoạn tiến độ chung.
              </p>
           </div>
         </div>
