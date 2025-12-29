@@ -1,5 +1,5 @@
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { User, Project, AppConfig, UserRole } from '../types';
 import { setDoc, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -32,10 +32,13 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
   const [isCreatingProject, setIsCreatingProject] = useState(false);
   const [newProject, setNewProject] = useState<Partial<Project>>({ id: 'P-', name: '', color: 'gold-leaf' });
 
+  const [localConfig, setLocalConfig] = useState<AppConfig>(_config || { googleSheetUrl: '', webAppUrl: '' });
+  useEffect(() => { setLocalConfig(_config || { googleSheetUrl: '', webAppUrl: '' }); }, [_config]);
+
   const handleToggleUserInProject = (projectId: string, field: 'staffIds' | 'clientIds', userId: string) => {
     const project = projects.find(p => p.id === projectId);
     if (project) {
-      const currentIds = [...project[field]];
+      const currentIds = [...(project[field] || [])];
       const index = currentIds.indexOf(userId);
       if (index === -1) {
         currentIds.push(userId);
@@ -257,14 +260,14 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
             <div className="space-y-6">
                <div className="flex justify-between items-end border-b border-[#00f2ff]/20 pb-2">
                  <h4 className="heritage-font text-[#00f2ff] text-xs font-bold tracking-widest uppercase">Đội Ngũ Cố Vấn (Staff)</h4>
-                 <span className="code-font text-[9px] text-[#a39e93]">{editingProject.staffIds.length} Đã gán</span>
+                 <span className="code-font text-[9px] text-[#a39e93]">{(editingProject.staffIds || []).length} Đã gán</span>
                </div>
                <div className="bg-[#0d0b0a] border border-[#d4af37]/10 rounded-xl overflow-hidden divide-y divide-[#d4af37]/5 h-96 overflow-y-auto scrollbar-thin">
                   {staffUsers.length === 0 ? (
                     <div className="p-10 text-center code-font text-[10px] text-[#a39e93] opacity-30 italic">KHÔNG CÓ NHÂN SỰ STAFF</div>
                   ) : staffUsers.map(s => (
-                    <div key={s.id} onClick={() => handleToggleUserInProject(editingProject.id, 'staffIds', s.id)} className={`flex items-center gap-4 p-4 cursor-pointer transition-all hover:bg-[#00f2ff]/5 ${editingProject.staffIds.includes(s.id) ? 'bg-[#00f2ff]/10' : ''}`}>
-                      <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingProject.staffIds.includes(s.id) ? 'bg-[#00f2ff] border-[#00f2ff]' : 'border-[#d4af37]/20 bg-transparent'}`}>{editingProject.staffIds.includes(s.id) && <i className="fa-solid fa-check text-[#0d0b0a] text-[10px]"></i>}</div>
+                    <div key={s.id} onClick={() => handleToggleUserInProject(editingProject.id, 'staffIds', s.id)} className={`flex items-center gap-4 p-4 cursor-pointer transition-all hover:bg-[#00f2ff]/5 ${(editingProject.staffIds || []).includes(s.id) ? 'bg-[#00f2ff]/10' : ''}`}>
+                      <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${(editingProject.staffIds || []).includes(s.id) ? 'bg-[#00f2ff] border-[#00f2ff]' : 'border-[#d4af37]/20 bg-transparent'}`}>{(editingProject.staffIds || []).includes(s.id) && <i className="fa-solid fa-check text-[#0d0b0a] text-[10px]"></i>}</div>
                       <div className="flex-1"><div className="text-xs font-bold text-[#f2ede4]">{s.fullName || s.username}</div><div className="text-[8px] code-font text-[#a39e93] tracking-widest uppercase">ID: {s.id}</div></div>
                     </div>
                   ))}
@@ -273,22 +276,40 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
             <div className="space-y-6">
                <div className="flex justify-between items-end border-b border-[#d4af37]/20 pb-2">
                  <h4 className="heritage-font text-[#d4af37] text-xs font-bold tracking-widest uppercase">Danh Sách Hội Viên (Clients)</h4>
-                 <span className="code-font text-[9px] text-[#a39e93]">{editingProject.clientIds.length} Đã gán</span>
+                 <span className="code-font text-[9px] text-[#a39e93]">{(editingProject.clientIds || []).length} Đã gán</span>
                </div>
                <div className="bg-[#0d0b0a] border border-[#d4af37]/10 rounded-xl overflow-hidden divide-y divide-[#d4af37]/5 h-96 overflow-y-auto scrollbar-thin">
                   {clientUsers.length === 0 ? (
                     <div className="p-10 text-center code-font text-[10px] text-[#a39e93] opacity-30 italic">KHÔNG CÓ HỘI VIÊN CLIENT</div>
                   ) : clientUsers.map(c => (
-                    <div key={c.id} onClick={() => handleToggleUserInProject(editingProject.id, 'clientIds', c.id)} className={`flex items-center gap-4 p-4 cursor-pointer transition-all hover:bg-[#d4af37]/5 ${editingProject.clientIds.includes(c.id) ? 'bg-[#d4af37]/10' : ''}`}>
-                      <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingProject.clientIds.includes(c.id) ? 'bg-[#d4af37] border-[#d4af37]' : 'border-[#d4af37]/20 bg-transparent'}`}>{editingProject.clientIds.includes(c.id) && <i className="fa-solid fa-check text-[#0d0b0a] text-[10px]"></i>}</div>
+                    <div key={c.id} onClick={() => handleToggleUserInProject(editingProject.id, 'clientIds', c.id)} className={`flex items-center gap-4 p-4 cursor-pointer transition-all hover:bg-[#d4af37]/5 ${(editingProject.clientIds || []).includes(c.id) ? 'bg-[#d4af37]/10' : ''}`}>
+                      <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${(editingProject.clientIds || []).includes(c.id) ? 'bg-[#d4af37] border-[#d4af37]' : 'border-[#d4af37]/20 bg-transparent'}`}>{(editingProject.clientIds || []).includes(c.id) && <i className="fa-solid fa-check text-[#0d0b0a] text-[10px]"></i>}</div>
                       <div className="flex-1"><div className="text-xs font-bold text-[#f2ede4]">{c.fullName || c.username}</div><div className="text-[8px] code-font text-[#a39e93] tracking-widest uppercase">{c.company || 'Private Node'}</div></div>
                     </div>
                   ))}
                </div>
             </div>
+            <div className="md:col-span-2 mt-4">
+               <div className="pt-6 border-t border-[#d4af37]/10">
+                 <h4 className="heritage-font text-[#d4af37] text-xs font-bold tracking-widest uppercase mb-3">Cấu hình Dự án</h4>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                   <div className="space-y-1">
+                     <label className="code-font text-[9px] text-[#a39e93] uppercase">Apps Script (Web App) URL</label>
+                     <input type="text" value={editingProject.webAppUrl || ''} onChange={(e) => setEditingProject(prev => prev ? ({...prev, webAppUrl: e.target.value}) : prev)} className="w-full bg-[#0d0b0a] border border-[#d4af37]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none" placeholder="https://script.google.com/macros/s/.../exec" />
+                   </div>
+                   <div className="space-y-1">
+                     <label className="code-font text-[9px] text-[#a39e93] uppercase">Google Sheet URL</label>
+                     <input type="text" value={editingProject.sheetUrl || ''} onChange={(e) => setEditingProject(prev => prev ? ({...prev, sheetUrl: e.target.value}) : prev)} className="w-full bg-[#0d0b0a] border border-[#d4af37]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none" placeholder="https://docs.google.com/spreadsheets/d/..." />
+                   </div>
+                 </div>
+               </div>
+            </div>
           </div>
           <div className="bg-[#0d0b0a] p-8 flex gap-4 border-t border-[#d4af37]/10">
-            <button onClick={() => setEditingProject(null)} className="flex-1 heritage-font bg-[#d4af37] text-[#0d0b0a] py-4 rounded font-black text-xs hover:bg-white tracking-[0.2em] transition-all shadow-lg active:scale-95">XÁC NHẬN THIẾT LẬP NHÂN SỰ</button>
+            <button onClick={() => {
+                if (editingProject) onUpdateProject(editingProject);
+                setEditingProject(null);
+              }} className="flex-1 heritage-font bg-[#d4af37] text-[#0d0b0a] py-4 rounded font-black text-xs hover:bg-white tracking-[0.2em] transition-all shadow-lg active:scale-95">XÁC NHẬN THIẾT LẬP NHÂN SỰ</button>
           </div>
         </div>
       </div>
@@ -321,8 +342,8 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
             </thead>
             <tbody>
               {projects.length === 0 ? (
-                <tr><td colSpan={6} className="p-20 text-center code-font text-[#a39e93] opacity-30 tracking-[0.5em] uppercase italic">CHƯA CÓ DỰ ÁN TRÊN HỆ THỐNG</td></tr>
-              ) : projects.map((p, i) => (
+                <tr key="no-projects"><td colSpan={6} className="p-20 text-center code-font text-[#a39e93] opacity-30 tracking-[0.5em] uppercase italic">CHƯA CÓ DỰ ÁN TRÊN HỆ THỐNG</td></tr>
+                  ) : projects.map((p, i) => (
                 <tr key={p.id} className="border-b border-[#d4af37]/5 hover:bg-[#d4af37]/5 transition-colors group">
                   <td className="p-4 code-font text-[#a39e93]">{i + 1}</td>
                   <td className="p-4 code-font text-[#00f2ff] font-bold neon-blue-glow">{p.id}</td>
@@ -330,10 +351,10 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
                     <div className="font-bold text-[#f2ede4] heritage-font tracking-widest">{p.name}</div>
                   </td>
                   <td className="p-4 text-center">
-                    <span className="bg-[#00f2ff]/10 text-[#00f2ff] px-2 py-1 rounded text-[10px] font-bold border border-[#00f2ff]/20">{p.staffIds.length}</span>
+                    <span className="bg-[#00f2ff]/10 text-[#00f2ff] px-2 py-1 rounded text-[10px] font-bold border border-[#00f2ff]/20">{(p.staffIds || []).length}</span>
                   </td>
                   <td className="p-4 text-center">
-                    <span className="bg-[#d4af37]/10 text-[#d4af37] px-2 py-1 rounded text-[10px] font-bold border border-[#d4af37]/20">{p.clientIds.length}</span>
+                    <span className="bg-[#d4af37]/10 text-[#d4af37] px-2 py-1 rounded text-[10px] font-bold border border-[#d4af37]/20">{(p.clientIds || []).length}</span>
                   </td>
                   <td className="p-4">
                     <div className="flex items-center justify-center gap-3">
@@ -413,10 +434,23 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
         return renderProjectManager();
       case 'system-settings':
         return (
-          <div className="bg-[#1a1412] p-12 rounded-2xl border border-[#d4af37]/20 text-center animate-in fade-in">
-             <i className="fa-solid fa-sliders text-[#d4af37] text-4xl mb-4"></i>
-             <h3 className="heritage-font text-xl text-white mb-2">CẤU HÌNH HỆ THỐNG</h3>
-             <p className="code-font text-[10px] text-[#a39e93] uppercase tracking-widest">Vui lòng sử dụng Settings Modal từ Sidebar để cấu hình API Giao thức.</p>
+          <div className="bg-[#1a1412] p-6 rounded-2xl border border-[#d4af37]/20 animate-in fade-in">
+            <h3 className="heritage-font text-[#d4af37] text-lg font-bold tracking-widest mb-4">CẤU HÌNH HỆ THỐNG</h3>
+            <p className="code-font text-[10px] text-[#a39e93] uppercase tracking-widest mb-6">Thiết lập URL Google Apps Script và Web App hook để đồng bộ dữ liệu.</p>
+            <div className="space-y-4">
+              <div className="space-y-1">
+                <label className="code-font text-[9px] text-[#a39e93] uppercase">Apps Script (Web App) URL</label>
+                <input type="text" value={localConfig.webAppUrl} onChange={(e) => setLocalConfig(prev => ({...prev, webAppUrl: e.target.value}))} className="w-full bg-[#0d0b0a] border border-[#d4af37]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none" placeholder="https://script.google.com/macros/s/...." />
+              </div>
+              <div className="space-y-1">
+                <label className="code-font text-[9px] text-[#a39e93] uppercase">Google Sheet URL</label>
+                <input type="text" value={localConfig.googleSheetUrl} onChange={(e) => setLocalConfig(prev => ({...prev, googleSheetUrl: e.target.value}))} className="w-full bg-[#0d0b0a] border border-[#d4af37]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none" placeholder="https://docs.google.com/spreadsheets/d/..." />
+              </div>
+              <div className="flex gap-4 mt-4">
+                <button onClick={() => { setLocalConfig(_config); }} className="px-4 py-2 bg-transparent border border-[#d4af37]/20 text-[#a39e93] rounded">HỦY</button>
+                <button onClick={() => { _onUpdateConfig(localConfig); }} className="px-4 py-2 bg-[#d4af37] text-[#0d0b0a] rounded font-bold">LƯU CẤU HÌNH</button>
+              </div>
+            </div>
           </div>
         );
       default:

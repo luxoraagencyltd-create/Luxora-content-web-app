@@ -20,7 +20,7 @@ const Sidebar: React.FC<Props> = ({ onSettingsClick: _onSettingsClick, currentPr
   return (
     <aside className="w-20 lg:w-64 bg-[#0d0b0a] h-full flex flex-col flex-shrink-0 transition-all duration-300 border-r border-[#1a1412] z-30">
       <div className="p-8 flex items-center justify-center lg:justify-start gap-3">
-        <i className="fa-solid fa-lotus text-[#d4af37] text-2xl drop-shadow-[0_0_8px_rgba(212,175,55,0.4)]"></i>
+        <img src="/assets/logo-48.png" alt="Luxora" className="w-8 h-8 object-contain" />
         <span className="hidden lg:block heritage-font font-bold text-[#d4af37] text-xl">Luxora {isAdmin ? 'Admin' : 'Portal'}</span>
       </div>
       

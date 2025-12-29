@@ -43,8 +43,8 @@ const Login: React.FC<Props> = ({ onLogin, users }) => {
           <div className="inline-block p-5 bg-[#c41e3a] rounded-lg shadow-[0_0_20px_rgba(196,30,58,0.4)] mb-8 border border-white/10">
             <i className="fa-solid fa-lotus text-white text-4xl"></i>
           </div>
-          <h1 className="heritage-font text-3xl font-black text-[#d4af37] mb-2 tracking-[0.2em]">Luxora Edtech</h1>
-          <p className="code-font text-[#a39e93] text-[9px] uppercase tracking-[0.3em]">Digital Temple Protocol 2.0</p>
+          <h1 className="heritage-font text-3xl font-black text-[#d4af37] mb-2 tracking-[0.2em]">Luxora Agency</h1>
+          <p className="code-font text-[#a39e93] text-[9px] uppercase tracking-[0.3em]">Digital Protocol 2.0</p>
         </div>
 
         <form onSubmit={handleLogin} className="space-y-6">
@@ -87,7 +87,7 @@ const Login: React.FC<Props> = ({ onLogin, users }) => {
             type="submit"
             className="w-full heritage-font bg-[#c41e3a] hover:bg-white hover:text-[#c41e3a] text-white font-black py-4 rounded shadow-[0_0_20px_rgba(196,30,58,0.4)] transition-all active:scale-[0.98] tracking-[0.2em]"
           >
-            VÀO HỌC VIỆN
+            VÀO DỰ ÁN
           </button>
         </form>
 

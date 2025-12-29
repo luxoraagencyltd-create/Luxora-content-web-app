@@ -32,6 +32,7 @@ const App: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [messages, setMessages] = useState<ReviewMessage[]>([]);
+  const [appConfig, setAppConfig] = useState<{googleSheetUrl: string; webAppUrl: string}>({ googleSheetUrl: '', webAppUrl: '' });
 
   // 1. Lấy dữ liệu Real-time từ Firebase cho Users và Projects
   useEffect(() => {
@@ -68,8 +69,17 @@ const App: React.FC = () => {
       const projectsData = snapshot.docs.map(doc => doc.data() as Project);
       setProjects(projectsData);
     });
-    return () => { unsubUsers(); unsubProjects(); };
+    const configDoc = doc(db, 'config', 'app');
+    const unsubConfig = onSnapshot(configDoc, (snap) => {
+      if (snap.exists()) setAppConfig(snap.data() as any);
+    });
+    return () => { unsubUsers(); unsubProjects(); unsubConfig(); };
   }, []);
+
+  const handleUpdateConfig = async (c: {googleSheetUrl: string; webAppUrl: string}) => {
+    await setDoc(doc(db, 'config', 'app'), c);
+    addLog('Cấu hình hệ thống đã được lưu.', 'SUCCESS');
+  };
 
   const addLog = useCallback((event: string, type: 'INFO' | 'SUCCESS' | 'WARNING' = 'INFO') => {
     const newLog: LogEntry = { id: Math.random().toString(), projectId: selectedProjectId || 'SYSTEM', timestamp: new Date(), event, type };
@@ -82,7 +92,9 @@ const App: React.FC = () => {
     addLog("Kích hoạt giao thức đồng bộ thực địa...", "INFO");
     
     try {
-      const response = await fetch(`${APPS_SCRIPT_URL}?action=getAllData&projectId=${selectedProjectId}`);
+      const scriptUrl = currentProject?.webAppUrl || appConfig.webAppUrl || APPS_SCRIPT_URL;
+      const proxyUrl = `/api/proxy?action=getAllData&projectId=${encodeURIComponent(selectedProjectId)}${scriptUrl ? `&target=${encodeURIComponent(scriptUrl)}` : ''}`;
+      const response = await fetch(proxyUrl);
       const result = await response.json();
       
       if (result.tasks05) {
@@ -146,7 +158,7 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedProjectId, addLog]);
+  }, [selectedProjectId, addLog, appConfig]);
 
   useEffect(() => {
     if (selectedProjectId) syncWithSheet();
@@ -224,7 +236,7 @@ const App: React.FC = () => {
   if (!currentUser) return <Login onLogin={setCurrentUser} users={users} />;
   
   if (activeView === 'project-selector' || (!selectedProjectId && currentUser.role !== 'ADMIN')) {
-    const available = projects.filter(p => p.clientIds.includes(currentUser.id) || p.staffIds.includes(currentUser.id) || currentUser.role === 'ADMIN');
+    const available = projects.filter(p => (p.clientIds || []).includes(currentUser.id) || (p.staffIds || []).includes(currentUser.id) || currentUser.role === 'ADMIN');
     return <ProjectSelector projects={available} onSelect={(p) => { setSelectedProjectId(p.id); setActiveView('dashboard'); }} onLogout={() => setCurrentUser(null)} />;
   }
 
@@ -287,7 +299,7 @@ const App: React.FC = () => {
               view={activeView} users={users} projects={projects} 
               onUpdateProject={handleUpdateProject} onCreateProject={handleCreateProject} 
               onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onDeleteUser={handleDeleteUser} 
-              config={{googleSheetUrl: '', webAppUrl: ''}} onUpdateConfig={() => {}} 
+              config={appConfig} onUpdateConfig={handleUpdateConfig} 
             />
           )}
         </main>

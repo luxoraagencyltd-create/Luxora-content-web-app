@@ -84,8 +84,8 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
                <i className="fa-solid fa-calendar-range text-[#d4af37] text-xl"></i>
              </div>
              <div>
-               <h3 className="heritage-font text-base font-bold text-[#d4af37] tracking-[0.2em] uppercase">Bộ lọc lộ trình</h3>
-               <p className="code-font text-[9px] text-[#a39e93] uppercase tracking-widest mt-1">Phạm vi quan sát dữ liệu Giao thức</p>
+               <h3 className="heritage-font text-base font-bold text-[#d4af37] tracking-[0.2em] uppercase">Bộ lọc dự án</h3>
+               <p className="code-font text-[9px] text-[#a39e93] uppercase tracking-widest mt-1">Phạm vi quan sát dữ liệu</p>
              </div>
           </div>
           <div className="flex items-center bg-[#0d0b0a] p-1 rounded-xl border border-[#d4af37]/30 shadow-inner">

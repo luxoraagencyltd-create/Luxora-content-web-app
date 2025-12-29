@@ -29,13 +29,14 @@ const ProjectSelector: React.FC<Props> = ({ projects, onSelect, onLogout }) => {
              <i className="fa-solid fa-triangle-exclamation text-[#c41e3a] text-4xl mb-4"></i>
              <p className="heritage-font text-white text-xl">Bạn chưa được gán vào Dự án nào!</p>
              <p className="code-font text-[10px] text-[#a39e93] mt-2 uppercase tracking-widest">Vui lòng liên hệ Admin để được cấp quyền truy cập Node</p>
-             <button onClick={onLogout} className="mt-8 heritage-font bg-[#c41e3a] text-white px-8 py-3 rounded font-black text-xs hover:bg-white hover:text-[#c41e3a] transition-all">THOÁT HỆ THỐNG</button>
+             <button type="button" onClick={onLogout} className="mt-8 heritage-font bg-[#c41e3a] text-white px-8 py-3 rounded font-black text-xs hover:bg-white hover:text-[#c41e3a] transition-all">THOÁT HỆ THỐNG</button>
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {projects.map((project) => (
               <button
                 key={project.id}
+                type="button"
                 onClick={() => onSelect(project)}
                 className="group relative bg-[#1a1412] border border-[#d4af37]/20 p-8 rounded-2xl text-left transition-all hover:bg-[#1a1412] hover:border-[#00f2ff] hover:-translate-y-2 hover:shadow-[0_20px_60px_rgba(0,242,255,0.1)] shadow-2xl lacquer-gloss overflow-hidden"
               >
@@ -73,7 +74,7 @@ const ProjectSelector: React.FC<Props> = ({ projects, onSelect, onLogout }) => {
 
         <div className="mt-20 pt-10 border-t border-[#1a1412] flex flex-col md:flex-row items-center justify-between gap-6">
           <p className="code-font text-[#a39e93] text-[9px] uppercase tracking-widest opacity-40 italic">© 2024 Luxora Cyber Temple. Restricted Access.</p>
-          <button onClick={onLogout} className="heritage-font text-[#c41e3a] text-xs font-black tracking-widest hover:text-white transition-all flex items-center gap-2">
+          <button type="button" onClick={onLogout} className="heritage-font text-[#c41e3a] text-xs font-black tracking-widest hover:text-white transition-all flex items-center gap-2">
             <i className="fa-solid fa-power-off"></i> THOÁT DANH TÍNH
           </button>
         </div>
