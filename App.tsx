@@ -1,6 +1,8 @@
 
-import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Task, ReviewMessage, LogEntry, AppConfig, Project, User, Issue } from './types';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Task, ReviewMessage, LogEntry, Project, User, Issue } from './types';
+import { db } from './lib/firebase';
+import { collection, onSnapshot, doc, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import Sidebar from './components/Sidebar';
 import SheetSimulator from './components/SheetSimulator';
 import ReviewPortal from './components/ReviewPortal';
@@ -14,20 +16,6 @@ import IssueLog from './components/IssueLog';
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw7HIgfEnoIkUOWFB-xU7dlyno84OaSWrdvJ3LXlX9KryXRJ7uobHzShg6MCoEzbIdh-Q/exec";
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-const parseCustomDate = (dateStr: string): Date | null => {
-  if (!dateStr) return null;
-  try {
-    const [d, m, y] = dateStr.split('/');
-    const monthIndex = MONTHS.indexOf(m);
-    if (monthIndex === -1) return null;
-    return new Date(parseInt(y), monthIndex, parseInt(d));
-  } catch (e) {
-    return null;
-  }
-};
-
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState<string>('dashboard');
@@ -39,23 +27,24 @@ const App: React.FC = () => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
-  const [projects, setProjects] = useState<Project[]>(() => {
-    const saved = localStorage.getItem('luxora_projects');
-    return saved ? JSON.parse(saved) : [{ id: 'P-SAMPLE-ELITE', name: 'LUXORA ELITE 2025', clientIds: ['U-004'], staffIds: ['U-002'], color: 'gold-leaf' }];
-  });
-
-  const [users, setUsers] = useState<User[]>(() => {
-    const saved = localStorage.getItem('luxora_users');
-    return saved ? JSON.parse(saved) : [
-      { id: 'U-001', username: 'admin', role: 'ADMIN', fullName: 'Đường Bá Hổ', password: '123' },
-      { id: 'U-002', username: 'mentor_vinh', role: 'STAFF', fullName: 'Cố vấn Quang Vinh', password: '123' },
-      { id: 'U-004', username: 'member_elite', role: 'CLIENT', fullName: 'Hội Viên Elite', password: '123' }
-    ];
-  });
-
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [messages, setMessages] = useState<ReviewMessage[]>([]);
+
+  // 1. Lấy dữ liệu Real-time từ Firebase cho Users và Projects
+  useEffect(() => {
+    const unsubUsers = onSnapshot(collection(db, 'users'), (snapshot) => {
+      const usersData = snapshot.docs.map(doc => doc.data() as User);
+      setUsers(usersData);
+    });
+    const unsubProjects = onSnapshot(collection(db, 'projects'), (snapshot) => {
+      const projectsData = snapshot.docs.map(doc => doc.data() as Project);
+      setProjects(projectsData);
+    });
+    return () => { unsubUsers(); unsubProjects(); };
+  }, []);
 
   const addLog = useCallback((event: string, type: 'INFO' | 'SUCCESS' | 'WARNING' = 'INFO') => {
     const newLog: LogEntry = { id: Math.random().toString(), projectId: selectedProjectId || 'SYSTEM', timestamp: new Date(), event, type };
@@ -72,41 +61,38 @@ const App: React.FC = () => {
       const result = await response.json();
       
       if (result.tasks05) {
-        setTasks(prev => {
-          const t05 = result.tasks05.map((row: any) => ({
-            id: row.id || row['ID task'],
-            projectId: selectedProjectId,
-            phase: row.phase || row['Giai đoạn (Phase)'],
-            name: row.name || row['Tên công việc (Task Name)'],
-            status: row.status || row['Trạng thái (Status)'],
-            priority: row.priority || row['Ưu tiên (Priority)'],
-            planStart: row.planStart || row['Plan Start'],
-            duration: parseInt(row.duration) || 0,
-            planEnd: row.planEnd || row['Plan End'],
-            link: row.link || '#',
-            staff: row.staff || row['Người thực hiện (Assignee)'],
-            feedbacks: row.feedbacks || [],
-            tab: '05'
-          }));
-          
-          const t06 = (result.tasks06 || []).map((row: any) => ({
-            id: row.id || row['ID task'],
-            projectId: selectedProjectId,
-            phase: row.type || row['Dạng content'],
-            planEnd: row.publishDate || row['Thời gian đăng'],
-            status: row.status || row['Status'],
-            pillar: row.pillar || row['Pillar'],
-            name: row.angle || row['Angle'],
-            link: row.link || row['Link bài đăng'],
-            seeding: row.seeding || row['Nội dung seeding'],
-            contentBody: row.content || row['Nội dung bài'],
-            image: row.image || row['Hình'],
-            feedbacks: row.feedbacks || [],
-            tab: '06'
-          }));
-          
-          return [...t05, ...t06];
-        });
+        const t05 = result.tasks05.map((row: any) => ({
+          id: row.id || row['ID task'],
+          projectId: selectedProjectId,
+          phase: row.phase || row['Giai đoạn (Phase)'],
+          name: row.name || row['Tên công việc (Task Name)'],
+          status: row.status || row['Trạng thái (Status)'],
+          priority: row.priority || row['Ưu tiên (Priority)'],
+          planStart: row.planStart || row['Plan Start'],
+          duration: parseInt(row.duration) || 0,
+          planEnd: row.planEnd || row['Plan End'],
+          link: row.link || '#',
+          staff: row.staff || row['Người thực hiện (Assignee)'],
+          feedbacks: row.feedbacks || [],
+          tab: '05'
+        }));
+        
+        const t06 = (result.tasks06 || []).map((row: any) => ({
+          id: row.id || row['ID task'],
+          projectId: selectedProjectId,
+          phase: row.type || row['Dạng content'],
+          planEnd: row.publishDate || row['Thời gian đăng'],
+          status: row.status || row['Status'],
+          pillar: row.pillar || row['Pillar'],
+          name: row.angle || row['Angle'],
+          link: row.link || row['Link bài đăng'],
+          seeding: row.seeding || row['Nội dung seeding'],
+          contentBody: row.content || row['Nội dung bài'],
+          image: row.image || row['Hình'],
+          feedbacks: row.feedbacks || [],
+          tab: '06'
+        }));
+        setTasks([...t05, ...t06]);
       }
 
       if (Array.isArray(result.issues)) {
@@ -125,7 +111,6 @@ const App: React.FC = () => {
           solution: row.solution || row['Giải pháp / Ghi chú']
         })));
       }
-      
       addLog("Dữ liệu thực địa đã được nạp thành công.", "SUCCESS");
     } catch (error) {
       console.error("Sync Error:", error);
@@ -136,10 +121,36 @@ const App: React.FC = () => {
   }, [selectedProjectId, addLog]);
 
   useEffect(() => {
-    if (selectedProjectId) {
-      syncWithSheet();
-    }
+    if (selectedProjectId) syncWithSheet();
   }, [selectedProjectId, syncWithSheet]);
+
+  // 2. Các hàm CRUD đồng bộ với Firebase
+  const handleUpdateProject = async (p: Project) => {
+    await setDoc(doc(db, 'projects', p.id), p);
+    addLog(`Dự án ${p.id} đã được cập nhật trên Cloud.`, 'SUCCESS');
+  };
+
+  const handleCreateProject = async (p: Partial<Project>) => {
+    const id = p.id || `P-${Date.now()}`;
+    const newProj: Project = { id, name: p.name || 'Dự Án Mới', clientIds: [], staffIds: [], color: 'gold-leaf' };
+    await setDoc(doc(db, 'projects', id), newProj);
+    addLog(`Dự án ${id} đã được khởi tạo trên Cloud.`, 'SUCCESS');
+  };
+
+  const handleUpdateUser = async (u: User) => {
+    await setDoc(doc(db, 'users', u.id), u);
+    addLog(`Node ${u.id} đã được cập nhật.`, 'SUCCESS');
+  };
+
+  const handleCreateUser = async (u: User) => {
+    await setDoc(doc(db, 'users', u.id), u);
+    addLog(`Node ${u.id} đã được khởi tạo.`, 'SUCCESS');
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    await deleteDoc(doc(db, 'users', userId));
+    addLog(`Node ${userId} đã bị xóa khỏi hệ thống.`, 'WARNING');
+  };
 
   const handleSendMessage = (text: string, replyToId?: string, taggedIds?: string[]) => {
     if (!selectedProjectId || !currentUser) return;
@@ -161,34 +172,24 @@ const App: React.FC = () => {
   const handleAction = async (action: string, taskId: string) => {
     if (action === 'approve') {
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'Done' } : t));
-      addLog(`Hội viên đã phê duyệt Node ${taskId}`, 'SUCCESS');
+      addLog(`Phê duyệt Node ${taskId}`, 'SUCCESS');
     } else if (action === 'edit') {
       setWaitingForFeedback(taskId);
     } else if (action === 'finish_feedback') {
       setWaitingForFeedback(null);
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'Need Edit' } : t));
-      addLog(`Hội viên đã gửi Feedback cho Node ${taskId}`, 'INFO');
     }
   };
 
   const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
-
-  const currentTabTasks = useMemo(() => {
-    return tasks.filter(t => (t as any).tab === activeTab);
-  }, [tasks, activeTab]);
+  const currentTabTasks = useMemo(() => tasks.filter(t => (t as any).tab === activeTab), [tasks, activeTab]);
 
   const filteredTasks = useMemo(() => {
     return currentTabTasks.filter(task => {
       if (statusFilter && task.status !== statusFilter) return false;
-      const taskDate = parseCustomDate(task.planEnd);
-      if (taskDate) {
-        const start = new Date(dateRange.start);
-        const end = new Date(dateRange.end);
-        if (taskDate < start || taskDate > end) return false;
-      }
       return true;
     });
-  }, [currentTabTasks, statusFilter, dateRange]);
+  }, [currentTabTasks, statusFilter]);
 
   const stats = useMemo(() => ({
     done: tasks.filter(t => t.status === 'Done').length,
@@ -215,14 +216,7 @@ const App: React.FC = () => {
         </div>
       )}
 
-      <Sidebar 
-        currentProject={currentProject} 
-        activeView={activeView} 
-        setActiveView={setActiveView} 
-        userRole={currentUser.role} 
-        onLogout={() => { setCurrentUser(null); setSelectedProjectId(null); }} 
-        onSwitchProject={() => setSelectedProjectId(null)} 
-      />
+      <Sidebar currentProject={currentProject} activeView={activeView} setActiveView={setActiveView} userRole={currentUser.role} onLogout={() => { setCurrentUser(null); setSelectedProjectId(null); }} onSwitchProject={() => setSelectedProjectId(null)} />
       
       <div className="flex-1 flex flex-col min-w-0 border-l border-[#1a1412]">
         <header className="h-16 border-b border-[#1a1412] bg-[#0d0b0a]/80 backdrop-blur-md flex items-center justify-between px-6 z-20 shadow-lg">
@@ -240,59 +234,24 @@ const App: React.FC = () => {
           </button>
         </header>
 
-        <main className="flex-1 overflow-auto p-6">
+        <main className="flex-1 overflow-auto p-6 scrollbar-thin">
           {activeView === 'dashboard' ? (
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
               <div className="lg:col-span-8 space-y-6 flex flex-col h-full overflow-hidden">
-                {currentUser.role === 'CLIENT' ? (
-                  <>
-                    <div className="grid grid-cols-4 gap-4">
-                      <ScoreCard label="DONE" count={stats.done} color="#00f2ff" active={statusFilter === 'Done'} onClick={() => setStatusFilter(statusFilter === 'Done' ? null : 'Done')} />
-                      <ScoreCard label="REVIEW" count={stats.review} color="#d4af37" active={statusFilter === 'Review'} onClick={() => setStatusFilter(statusFilter === 'Review' ? null : 'Review')} />
-                      <ScoreCard label="DOING" count={stats.doing} color="#f2ede4" active={statusFilter === 'Doing'} onClick={() => setStatusFilter(statusFilter === 'Doing' ? null : 'Doing')} />
-                      <ScoreCard label="TO DO" count={stats.todo} color="#a39e93" active={statusFilter === 'To do'} onClick={() => setStatusFilter(statusFilter === 'To do' ? null : 'To do')} />
-                    </div>
-                    <div className="flex-1 bg-[#1a1412] rounded-2xl border border-[#d4af37]/10 overflow-hidden flex flex-col shadow-2xl">
-                      <div className="p-4 border-b border-[#d4af37]/10 bg-[#0d0b0a]/30 flex justify-between items-center">
-                        <h3 className="heritage-font text-xs font-bold tracking-widest text-[#d4af37]">Danh mục Giao thức Chiến lược</h3>
-                        <div className="flex gap-2">
-                           <button onClick={() => setActiveTab('05')} className={`px-3 py-1 text-[9px] font-bold border rounded transition-all ${activeTab === '05' ? 'bg-[#d4af37] border-[#d4af37] text-black' : 'border-[#d4af37]/30 text-[#a39e93]'}`}>05. TASK MASTER</button>
-                           <button onClick={() => setActiveTab('06')} className={`px-3 py-1 text-[9px] font-bold border rounded transition-all ${activeTab === '06' ? 'bg-[#d4af37] border-[#d4af37] text-black' : 'border-[#d4af37]/30 text-[#a39e93]'}`}>06. PRODUCTION</button>
-                        </div>
-                      </div>
-                      <div className="flex-1 overflow-auto scrollbar-thin">
-                        <table className="w-full text-left text-[11px]">
-                          <thead className="sticky top-0 bg-[#0d0b0a] text-[#a39e93] z-10">
-                            <tr><th className="p-4 w-12">#</th><th className="p-4">Nội dung Node</th><th className="p-4 text-center">Deadline</th><th className="p-4">Trạng thái</th><th className="p-4 text-center">BP</th></tr>
-                          </thead>
-                          <tbody>
-                            {filteredTasks.map((t, i) => (
-                              <tr key={t.id} className="border-b border-[#d4af37]/5 hover:bg-[#d4af37]/5 transition-colors">
-                                <td className="p-4 code-font text-[#a39e93]">{i+1}</td>
-                                <td className="p-4 italic font-medium">{t.name}</td>
-                                <td className="p-4 code-font text-center font-bold text-[#d4af37]">{t.planEnd}</td>
-                                <td className="p-4"><span className={`px-2 py-0.5 rounded text-[8px] font-black border uppercase ${t.status === 'Done' ? 'border-[#00f2ff] text-[#00f2ff]' : 'border-[#d4af37] text-[#d4af37]'}`}>{t.status}</span></td>
-                                <td className="p-4 text-center"><a href={t.link} target="_blank" rel="noreferrer" className="text-[#00f2ff]"><i className="fa-solid fa-arrow-up-right-from-square"></i></a></td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </>
-                ) : (
-                  <div className="space-y-6 h-full flex flex-col">
-                    <WorkflowVisualizer activeStage={tasks.some(t => t.status === 'Review') ? 2 : 1} />
-                    <section className="flex-1 bg-[#1a1412] rounded-2xl border border-[#d4af37]/20 p-1 overflow-hidden flex flex-col shadow-2xl">
-                      <div className="p-3 bg-[#0d0b0a] border-b border-[#d4af37]/20 flex gap-4">
-                        <button onClick={() => setActiveTab('05')} className={`px-4 py-1 text-[10px] font-bold heritage-font transition-all ${activeTab === '05' ? 'text-[#d4af37] border-b-2 border-[#d4af37]' : 'text-[#a39e93]'}`}>05. TASK MASTER</button>
-                        <button onClick={() => setActiveTab('06')} className={`px-4 py-1 text-[10px] font-bold heritage-font transition-all ${activeTab === '06' ? 'text-[#d4af37] border-b-2 border-[#d4af37]' : 'text-[#a39e93]'}`}>06. PRODUCTION</button>
-                      </div>
-                      <SheetSimulator tasks={currentTabTasks} onTaskSubmit={handleAction} currentTab={activeTab} />
-                    </section>
-                    <section className="h-40 bg-[#1a1412] rounded-2xl border border-[#d4af37]/10 p-4 flex flex-col"><LogPanel logs={logs} /></section>
-                  </div>
-                )}
+                <div className="grid grid-cols-4 gap-4">
+                  <ScoreCard label="DONE" count={stats.done} color="#00f2ff" active={statusFilter === 'Done'} onClick={() => setStatusFilter(statusFilter === 'Done' ? null : 'Done')} />
+                  <ScoreCard label="REVIEW" count={stats.review} color="#d4af37" active={statusFilter === 'Review'} onClick={() => setStatusFilter(statusFilter === 'Review' ? null : 'Review')} />
+                  <ScoreCard label="DOING" count={stats.doing} color="#f2ede4" active={statusFilter === 'Doing'} onClick={() => setStatusFilter(statusFilter === 'Doing' ? null : 'Doing')} />
+                  <ScoreCard label="TO DO" count={stats.todo} color="#a39e93" active={statusFilter === 'To do'} onClick={() => setStatusFilter(statusFilter === 'To do' ? null : 'To do')} />
+                </div>
+                <section className="flex-1 bg-[#1a1412] rounded-2xl border border-[#d4af37]/20 p-1 overflow-hidden flex flex-col shadow-2xl">
+                   <div className="p-3 bg-[#0d0b0a] border-b border-[#d4af37]/20 flex gap-4">
+                      <button onClick={() => setActiveTab('05')} className={`px-4 py-1 text-[10px] font-bold heritage-font transition-all ${activeTab === '05' ? 'text-[#d4af37] border-b-2 border-[#d4af37]' : 'text-[#a39e93]'}`}>05. TASK MASTER</button>
+                      <button onClick={() => setActiveTab('06')} className={`px-4 py-1 text-[10px] font-bold heritage-font transition-all ${activeTab === '06' ? 'text-[#d4af37] border-b-2 border-[#d4af37]' : 'text-[#a39e93]'}`}>06. PRODUCTION</button>
+                   </div>
+                   <SheetSimulator tasks={currentTabTasks} onTaskSubmit={handleAction} currentTab={activeTab} />
+                </section>
+                <section className="h-40 bg-[#1a1412] rounded-2xl border border-[#d4af37]/10 p-4 flex flex-col"><LogPanel logs={logs} /></section>
               </div>
               <div className="lg:col-span-4 h-full"><ReviewPortal messages={messages} users={users} currentUser={currentUser} onAction={handleAction} onSendMessage={handleSendMessage} isWaiting={!!waitingForFeedback} projectName={currentProject?.name} activeTaskId={waitingForFeedback} /></div>
             </div>
@@ -301,7 +260,12 @@ const App: React.FC = () => {
           ) : activeView === 'visuals' ? (
             <ClientVisuals tasks={tasks} issues={issues} dateRange={dateRange} setDateRange={setDateRange} />
           ) : (
-            <AdminPanel view={activeView} users={users} projects={projects} onUpdateProject={() => {}} onCreateProject={() => {}} onUpdateUser={() => {}} onCreateUser={() => {}} onDeleteUser={() => {}} config={{googleSheetUrl: '', webAppUrl: ''}} onUpdateConfig={() => {}} />
+            <AdminPanel 
+              view={activeView} users={users} projects={projects} 
+              onUpdateProject={handleUpdateProject} onCreateProject={handleCreateProject} 
+              onUpdateUser={handleUpdateUser} onCreateUser={handleCreateUser} onDeleteUser={handleDeleteUser} 
+              config={{googleSheetUrl: '', webAppUrl: ''}} onUpdateConfig={() => {}} 
+            />
           )}
         </main>
       </div>

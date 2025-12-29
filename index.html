@@ -30,6 +30,7 @@
             color: var(--rice-paper);
             margin: 0;
             padding: 0;
+            overflow: hidden;
         }
 
         .heritage-font {
@@ -50,8 +51,10 @@
             text-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
         }
 
+        /* Custom scrollbar for webkit */
         ::-webkit-scrollbar {
             width: 5px;
+            height: 5px;
         }
         ::-webkit-scrollbar-track {
             background: var(--lacquer-black);
@@ -64,20 +67,19 @@
             background: var(--gold-dark);
         }
 
-        /* Phục vụ Vercel/Vite build */
         #root {
-            min-height: 100vh;
+            height: 100vh;
         }
     </style>
 <script type="importmap">
 {
   "imports": {
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
     "react/": "https://esm.sh/react@^19.2.3/",
     "react": "https://esm.sh/react@^19.2.3",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "firebase/": "https://esm.sh/firebase@^12.7.0/",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
     "vite": "https://esm.sh/vite@^7.3.0",
-    "firebase/": "https://esm.sh/firebase@^12.7.0/"
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
   }
 }
 </script>

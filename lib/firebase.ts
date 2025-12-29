@@ -2,16 +2,15 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 
-// Cấu hình Firebase của bạn (Lấy từ Firebase Console -> Project Settings)
+// Fix: Use process.env instead of import.meta.env to resolve property access errors and align with the environment's secret injection strategy.
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "luxora-protocol.firebaseapp.com",
-  projectId: "luxora-protocol",
-  storageBucket: "luxora-protocol.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: process.env.VITE_FIREBASE_API_KEY,
+  authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.VITE_FIREBASE_APP_ID
 };
 
-// Khởi tạo Firebase
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
