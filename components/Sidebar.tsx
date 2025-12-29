@@ -20,7 +20,7 @@ const Sidebar: React.FC<Props> = ({ onSettingsClick: _onSettingsClick, currentPr
   return (
     <aside className="w-20 lg:w-64 bg-[#0d0b0a] h-full flex flex-col flex-shrink-0 transition-all duration-300 border-r border-[#1a1412] z-30">
       <div className="p-8 flex items-center justify-center lg:justify-start gap-3">
-        <img src="/assets/logo-48.png" alt="Luxora" className="w-8 h-8 object-contain" />
+        <LogoImage />
         <span className="hidden lg:block heritage-font font-bold text-[#d4af37] text-xl">Luxora {isAdmin ? 'Admin' : 'Portal'}</span>
       </div>
       
@@ -106,3 +106,25 @@ const NavItem = ({ icon, label, active = false, isDanger = false }: { icon: stri
 );
 
 export default Sidebar;
+
+const LogoImage: React.FC = () => {
+  const [failed, setFailed] = React.useState(false);
+  if (!failed) {
+    return <img src="/assets/logo-48.png" alt="Luxora" className="w-8 h-8 object-contain" onError={() => setFailed(true)} />;
+  }
+  return (
+    <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-8 h-8">
+      <circle cx="32" cy="32" r="10" stroke="#d4af37" strokeWidth="2" fill="none" />
+      <g stroke="#d4af37" strokeWidth="2" strokeLinecap="round">
+        <line x1="32" y1="4" x2="32" y2="14" />
+        <line x1="32" y1="50" x2="32" y2="60" />
+        <line x1="4" y1="32" x2="14" y2="32" />
+        <line x1="50" y1="32" x2="60" y2="32" />
+        <line x1="45" y1="14" x2="52" y2="20" />
+        <line x1="12" y1="45" x2="20" y2="52" />
+        <line x1="12" y1="20" x2="20" y2="14" />
+        <line x1="45" y1="52" x2="52" y2="45" />
+      </g>
+    </svg>
+  );
+};

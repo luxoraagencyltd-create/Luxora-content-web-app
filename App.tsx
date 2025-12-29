@@ -95,7 +95,16 @@ const App: React.FC = () => {
       const scriptUrl = currentProject?.webAppUrl || appConfig.webAppUrl || APPS_SCRIPT_URL;
       const proxyUrl = `/api/proxy?action=getAllData&projectId=${encodeURIComponent(selectedProjectId)}${scriptUrl ? `&target=${encodeURIComponent(scriptUrl)}` : ''}`;
       const response = await fetch(proxyUrl);
-      const result = await response.json();
+      const text = await response.text();
+      let result: any;
+      try {
+        result = JSON.parse(text);
+      } catch (err) {
+        console.error('Sync Error: Non-JSON response from proxy:', text);
+        addLog('Giao thức đồng bộ thất bại: phản hồi không phải JSON. Kiểm tra Console/Logs.', 'WARNING');
+        setIsLoading(false);
+        return;
+      }
       
       if (result.tasks05) {
         const t05 = result.tasks05.map((row: Record<string, unknown>) => ({

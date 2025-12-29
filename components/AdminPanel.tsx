@@ -34,6 +34,8 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
 
   const [localConfig, setLocalConfig] = useState<AppConfig>(_config || { googleSheetUrl: '', webAppUrl: '' });
   useEffect(() => { setLocalConfig(_config || { googleSheetUrl: '', webAppUrl: '' }); }, [_config]);
+  const [isTesting, setIsTesting] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   const handleToggleUserInProject = (projectId: string, field: 'staffIds' | 'clientIds', userId: string) => {
     const project = projects.find(p => p.id === projectId);
@@ -301,6 +303,24 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
                      <label className="code-font text-[9px] text-[#a39e93] uppercase">Google Sheet URL</label>
                      <input type="text" value={editingProject.sheetUrl || ''} onChange={(e) => setEditingProject(prev => prev ? ({...prev, sheetUrl: e.target.value}) : prev)} className="w-full bg-[#0d0b0a] border border-[#d4af37]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none" placeholder="https://docs.google.com/spreadsheets/d/..." />
                    </div>
+                   <div className="flex items-center gap-2 mt-2">
+                     <button onClick={async () => {
+                        if (!editingProject) return;
+                        setIsTesting(true); setTestResult(null);
+                        try {
+                          const proxy = `/api/proxy?action=test&target=${encodeURIComponent(editingProject.webAppUrl || '')}`;
+                          const r = await fetch(proxy);
+                          const text = await r.text();
+                          setTestResult(text);
+                        } catch (err:any) {
+                          setTestResult(String(err));
+                        } finally { setIsTesting(false); }
+                      }} className="px-3 py-2 bg-[#00f2ff] text-[#0d0b0a] rounded text-xs font-bold">{isTesting ? 'ĐANG KIỂM TRA...' : 'KIỂM TRA WEBAPP NÀY'}</button>
+                     {testResult && <div className="text-[10px] code-font text-[#a39e93]">Kết quả: <span className="italic">(xem bên dưới)</span></div>}
+                   </div>
+                   {testResult && (
+                     <div className="mt-3 p-3 bg-[#0d0b0a] border border-[#d4af37]/10 rounded text-xs code-font max-h-48 overflow-auto whitespace-pre-wrap">{testResult}</div>
+                   )}
                  </div>
                </div>
             </div>
@@ -446,10 +466,28 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
                 <label className="code-font text-[9px] text-[#a39e93] uppercase">Google Sheet URL</label>
                 <input type="text" value={localConfig.googleSheetUrl} onChange={(e) => setLocalConfig(prev => ({...prev, googleSheetUrl: e.target.value}))} className="w-full bg-[#0d0b0a] border border-[#d4af37]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none" placeholder="https://docs.google.com/spreadsheets/d/..." />
               </div>
-              <div className="flex gap-4 mt-4">
-                <button onClick={() => { setLocalConfig(_config); }} className="px-4 py-2 bg-transparent border border-[#d4af37]/20 text-[#a39e93] rounded">HỦY</button>
-                <button onClick={() => { _onUpdateConfig(localConfig); }} className="px-4 py-2 bg-[#d4af37] text-[#0d0b0a] rounded font-bold">LƯU CẤU HÌNH</button>
+              <div className="flex flex-col md:flex-row gap-4 mt-4 items-start">
+                <div className="flex gap-2">
+                  <button onClick={() => { setLocalConfig(_config); }} className="px-4 py-2 bg-transparent border border-[#d4af37]/20 text-[#a39e93] rounded">HỦY</button>
+                  <button onClick={() => { _onUpdateConfig(localConfig); }} className="px-4 py-2 bg-[#d4af37] text-[#0d0b0a] rounded font-bold">LƯU CẤU HÌNH</button>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={async () => {
+                      setIsTesting(true); setTestResult(null);
+                      try {
+                        const proxy = `/api/proxy?action=test&target=${encodeURIComponent(localConfig.webAppUrl || '')}`;
+                        const r = await fetch(proxy);
+                        const text = await r.text();
+                        setTestResult(text);
+                      } catch (err:any) {
+                        setTestResult(String(err));
+                      } finally { setIsTesting(false); }
+                    }} className="px-4 py-2 bg-[#00f2ff] text-[#0d0b0a] rounded font-bold">{isTesting ? 'ĐANG KIỂM TRA...' : 'KIỂM TRA WEBAPP'}</button>
+                </div>
               </div>
+              {testResult && (
+                <div className="mt-4 p-3 bg-[#0d0b0a] border border-[#d4af37]/10 rounded text-xs code-font max-h-48 overflow-auto whitespace-pre-wrap">{testResult}</div>
+              )}
             </div>
           </div>
         );
