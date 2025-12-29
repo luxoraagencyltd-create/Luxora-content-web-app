@@ -1,0 +1,17 @@
+{
+  "name": "Luxora Edtech Protocol",
+  "short_name": "Luxora",
+  "description": "Văn Miếu Cyber - Nơi nạp tư duy chiến lược cho doanh nghiệp kỷ nguyên số.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0d0b0a",
+  "theme_color": "#c41e3a",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/5968/5968756.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ],
+  "requestFramePermissions": []
+}

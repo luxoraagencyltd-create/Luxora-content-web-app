@@ -1,0 +1,375 @@
+
+import React, { useState } from 'react';
+import { User, Project, AppConfig, UserRole } from '../types';
+
+interface Props {
+  view: string;
+  users: User[];
+  projects: Project[];
+  onUpdateProject: (p: Project) => void;
+  onUpdateUser: (u: User) => void;
+  onCreateUser: (u: User) => void;
+  onDeleteUser: (userId: string) => void;
+  onCreateProject: (p: Partial<Project>) => void;
+  config: AppConfig;
+  onUpdateConfig: (c: AppConfig) => void;
+}
+
+const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, onUpdateUser, onCreateUser, onDeleteUser, onCreateProject, config, onUpdateConfig }) => {
+  const [editingProject, setEditingProject] = useState<Project | null>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isCreatingUser, setIsCreatingUser] = useState(false);
+  const [newUser, setNewUser] = useState<User>({ 
+    id: `U-${Math.floor(Math.random() * 900) + 100}`, 
+    username: '', 
+    fullName: '', 
+    company: '',
+    role: 'CLIENT', 
+    password: '123' 
+  });
+  const [isCreatingProject, setIsCreatingProject] = useState(false);
+  const [newProject, setNewProject] = useState<Partial<Project>>({ id: 'P-', name: '', color: 'gold-leaf' });
+
+  const handleToggleUserInProject = (projectId: string, field: 'staffIds' | 'clientIds', userId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (project) {
+      const currentIds = [...project[field]];
+      const index = currentIds.indexOf(userId);
+      if (index === -1) {
+        currentIds.push(userId);
+      } else {
+        currentIds.splice(index, 1);
+      }
+      const updated = { ...project, [field]: currentIds };
+      onUpdateProject(updated);
+      setEditingProject(updated);
+    }
+  };
+
+  const handleUpdateUserField = (field: keyof User, value: any) => {
+    if (editingUser) {
+      const updated = { ...editingUser, [field]: value };
+      setEditingUser(updated);
+    }
+  };
+
+  const handleSaveUser = () => {
+    if (editingUser) {
+      onUpdateUser(editingUser);
+      setEditingUser(null);
+    }
+  };
+
+  const handleCreateUserSubmit = () => {
+    if (newUser.username) {
+      onCreateUser(newUser);
+      setIsCreatingUser(false);
+      setNewUser({ 
+        id: `U-${Math.floor(Math.random() * 900) + 100}`, 
+        username: '', 
+        fullName: '', 
+        company: '',
+        role: 'CLIENT', 
+        password: '123' 
+      });
+    } else {
+      alert("Vui lòng nhập Username để khởi tạo Node!");
+    }
+  };
+
+  const handleCreateProjectSubmit = () => {
+    if (newProject.id && newProject.name) {
+      onCreateProject(newProject);
+      setIsCreatingProject(false);
+      setNewProject({ id: 'P-', name: '', color: 'gold-leaf' });
+    }
+  };
+
+  const renderUserModal = (user: User, isEdit: boolean) => {
+    const title = isEdit ? "CHỈNH SỬA DANH TÍNH" : "KHỞI TẠO DANH TÍNH MỚI";
+    const onSave = isEdit ? handleSaveUser : handleCreateUserSubmit;
+    const onClose = () => isEdit ? setEditingUser(null) : setIsCreatingUser(false);
+    
+    const setField = (field: keyof User, val: any) => {
+      if (isEdit) handleUpdateUserField(field, val);
+      else setNewUser(prev => ({ ...prev, [field]: val }));
+    };
+
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#050404]/95 backdrop-blur-xl">
+        <div className="bg-[#1a1412] rounded-2xl border border-[#d4af37]/40 p-0 w-full max-w-md shadow-[0_0_100px_rgba(0,0,0,1)] lacquer-gloss animate-in zoom-in duration-200 overflow-hidden">
+          <div className="bg-[#0d0b0a] p-6 border-b border-[#d4af37]/20 flex justify-between items-center">
+            <h3 className="heritage-font text-[#d4af37] text-lg font-bold tracking-widest flex items-center gap-3">
+              <i className={`fa-solid ${isEdit ? 'fa-user-pen' : 'fa-user-plus'} text-[#00f2ff]`}></i> {title}
+            </h3>
+            <button onClick={onClose} className="text-[#a39e93] hover:text-[#c41e3a] transition-all"><i className="fa-solid fa-xmark text-xl"></i></button>
+          </div>
+          <div className="p-8 space-y-5 max-h-[75vh] overflow-y-auto custom-scrollbar">
+            <div className="space-y-1.5">
+              <label className="code-font text-[9px] font-black text-[#a39e93] uppercase tracking-widest">Node ID (Cố định)</label>
+              <input type="text" value={user.id} onChange={(e) => setField('id', e.target.value)} className="w-full bg-[#0d0b0a]/50 border border-[#d4af37]/20 rounded-lg p-3 text-xs text-[#00f2ff] outline-none code-font font-bold" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="code-font text-[9px] font-black text-[#d4af37] uppercase tracking-widest">Tên Đăng Nhập (Username)</label>
+              <input type="text" value={user.username} onChange={(e) => setField('username', e.target.value)} className="w-full bg-[#0d0b0a] border border-[#d4af37]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none focus:border-[#00f2ff] transition-all" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="code-font text-[9px] font-black text-[#d4af37] uppercase tracking-widest">Họ Tên / Biệt Danh</label>
+              <input type="text" value={user.fullName || ''} onChange={(e) => setField('fullName', e.target.value)} className="w-full bg-[#0d0b0a] border border-[#d4af37]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none focus:border-[#00f2ff] transition-all" placeholder="VD: Đường Bá Hổ" />
+            </div>
+            <div className="space-y-1.5 p-3 bg-[#d4af37]/5 rounded-lg border border-[#d4af37]/10">
+              <label className="code-font text-[9px] font-black text-[#00f2ff] uppercase tracking-widest flex items-center gap-2">
+                <i className="fa-solid fa-building"></i> Tên Công Ty / Tổ Chức
+              </label>
+              <input type="text" value={user.company || ''} onChange={(e) => setField('company', e.target.value)} className="w-full bg-[#0d0b0a] border border-[#d4af37]/40 rounded-lg p-3 text-xs text-[#f2ede4] outline-none focus:border-[#00f2ff] transition-all" placeholder="VD: Luxora Media Group..." />
+            </div>
+            <div className="space-y-1.5">
+              <label className="code-font text-[9px] font-black text-[#a39e93] uppercase tracking-widest">Vai Trò Hệ Thống</label>
+              <select value={user.role} onChange={(e) => setField('role', e.target.value as UserRole)} className="w-full bg-[#0d0b0a] border border-[#d4af37]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none focus:border-[#d4af37] cursor-pointer">
+                <option value="ADMIN">ADMIN - Tổng Quản</option>
+                <option value="STAFF">STAFF - Cố Vấn</option>
+                <option value="CLIENT">CLIENT - Member</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="code-font text-[9px] font-black text-[#c41e3a] uppercase tracking-widest flex items-center gap-2">
+                <i className="fa-solid fa-shield-halved"></i> Mã Bảo Mật (Password)
+              </label>
+              <input type="text" value={user.password || ''} onChange={(e) => setField('password', e.target.value)} className="w-full bg-[#0d0b0a] border border-[#c41e3a]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none focus:border-[#00f2ff] code-font font-bold" />
+            </div>
+          </div>
+          <div className="p-6 bg-[#0d0b0a] flex gap-4 border-t border-[#d4af37]/10">
+            <button onClick={onClose} className="flex-1 py-3 text-[#a39e93] text-[10px] heritage-font tracking-[0.2em] uppercase hover:text-white transition-colors">HỦY BỎ</button>
+            <button onClick={onSave} className="flex-1 py-3 bg-[#d4af37] text-[#0d0b0a] rounded font-black text-[10px] heritage-font tracking-[0.2em] uppercase hover:bg-white transition-all shadow-[0_0_20px_rgba(212,175,55,0.3)] active:scale-95">
+              {isEdit ? 'LƯU DANH TÍNH' : 'KHỞI TẠO NODE'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderTeamConfigModal = () => {
+    if (!editingProject) return null;
+    const staffUsers = users.filter(u => u.role === 'STAFF');
+    const clientUsers = users.filter(u => u.role === 'CLIENT');
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#050404]/95 backdrop-blur-xl">
+        <div className="bg-[#1a1412] rounded-2xl border border-[#d4af37]/40 p-0 w-full max-w-4xl shadow-[0_0_150px_rgba(0,0,0,1)] lacquer-gloss animate-in zoom-in duration-200 overflow-hidden">
+          <div className="bg-[#0d0b0a] p-6 border-b border-[#d4af37]/20 flex justify-between items-center">
+            <h3 className="heritage-font text-[#d4af37] text-xl font-bold tracking-widest flex items-center gap-3">
+              <i className="fa-solid fa-users-rectangle text-[#00f2ff]"></i> QUẢN TRỊ NHÂN SỰ: {editingProject.name}
+            </h3>
+            <button onClick={() => setEditingProject(null)} className="text-[#a39e93] hover:text-[#c41e3a] transition-all"><i className="fa-solid fa-xmark text-2xl"></i></button>
+          </div>
+          <div className="p-8 grid grid-cols-1 md:grid-cols-2 gap-10 max-h-[70vh] overflow-y-auto scrollbar-thin">
+            <div className="space-y-6">
+               <div className="flex justify-between items-end border-b border-[#00f2ff]/20 pb-2">
+                 <h4 className="heritage-font text-[#00f2ff] text-xs font-bold tracking-widest uppercase">Đội Ngũ Cố Vấn (Staff)</h4>
+                 <span className="code-font text-[9px] text-[#a39e93]">{editingProject.staffIds.length} Đã gán</span>
+               </div>
+               <div className="bg-[#0d0b0a] border border-[#d4af37]/10 rounded-xl overflow-hidden divide-y divide-[#d4af37]/5 h-96 overflow-y-auto scrollbar-thin">
+                  {staffUsers.length === 0 ? (
+                    <div className="p-10 text-center code-font text-[10px] text-[#a39e93] opacity-30 italic">KHÔNG CÓ NHÂN SỰ STAFF</div>
+                  ) : staffUsers.map(s => (
+                    <div key={s.id} onClick={() => handleToggleUserInProject(editingProject.id, 'staffIds', s.id)} className={`flex items-center gap-4 p-4 cursor-pointer transition-all hover:bg-[#00f2ff]/5 ${editingProject.staffIds.includes(s.id) ? 'bg-[#00f2ff]/10' : ''}`}>
+                      <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingProject.staffIds.includes(s.id) ? 'bg-[#00f2ff] border-[#00f2ff]' : 'border-[#d4af37]/20 bg-transparent'}`}>{editingProject.staffIds.includes(s.id) && <i className="fa-solid fa-check text-[#0d0b0a] text-[10px]"></i>}</div>
+                      <div className="flex-1"><div className="text-xs font-bold text-[#f2ede4]">{s.fullName || s.username}</div><div className="text-[8px] code-font text-[#a39e93] tracking-widest uppercase">ID: {s.id}</div></div>
+                    </div>
+                  ))}
+               </div>
+            </div>
+            <div className="space-y-6">
+               <div className="flex justify-between items-end border-b border-[#d4af37]/20 pb-2">
+                 <h4 className="heritage-font text-[#d4af37] text-xs font-bold tracking-widest uppercase">Danh Sách Hội Viên (Clients)</h4>
+                 <span className="code-font text-[9px] text-[#a39e93]">{editingProject.clientIds.length} Đã gán</span>
+               </div>
+               <div className="bg-[#0d0b0a] border border-[#d4af37]/10 rounded-xl overflow-hidden divide-y divide-[#d4af37]/5 h-96 overflow-y-auto scrollbar-thin">
+                  {clientUsers.length === 0 ? (
+                    <div className="p-10 text-center code-font text-[10px] text-[#a39e93] opacity-30 italic">KHÔNG CÓ HỘI VIÊN CLIENT</div>
+                  ) : clientUsers.map(c => (
+                    <div key={c.id} onClick={() => handleToggleUserInProject(editingProject.id, 'clientIds', c.id)} className={`flex items-center gap-4 p-4 cursor-pointer transition-all hover:bg-[#d4af37]/5 ${editingProject.clientIds.includes(c.id) ? 'bg-[#d4af37]/10' : ''}`}>
+                      <div className={`w-5 h-5 rounded border flex items-center justify-center transition-all ${editingProject.clientIds.includes(c.id) ? 'bg-[#d4af37] border-[#d4af37]' : 'border-[#d4af37]/20 bg-transparent'}`}>{editingProject.clientIds.includes(c.id) && <i className="fa-solid fa-check text-[#0d0b0a] text-[10px]"></i>}</div>
+                      <div className="flex-1"><div className="text-xs font-bold text-[#f2ede4]">{c.fullName || c.username}</div><div className="text-[8px] code-font text-[#a39e93] tracking-widest uppercase">{c.company || 'Private Node'}</div></div>
+                    </div>
+                  ))}
+               </div>
+            </div>
+          </div>
+          <div className="bg-[#0d0b0a] p-8 flex gap-4 border-t border-[#d4af37]/10">
+            <button onClick={() => setEditingProject(null)} className="flex-1 heritage-font bg-[#d4af37] text-[#0d0b0a] py-4 rounded font-black text-xs hover:bg-white tracking-[0.2em] transition-all shadow-lg active:scale-95">XÁC NHẬN THIẾT LẬP NHÂN SỰ</button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderProjectManager = () => (
+    <div className="animate-in fade-in duration-500 space-y-6">
+      <div className="overflow-hidden bg-[#1a1412] border border-[#d4af37]/20 rounded-2xl lacquer-gloss shadow-2xl">
+        <div className="p-6 border-b border-[#d4af37]/20 flex justify-between items-center bg-[#0d0b0a]/50">
+          <div>
+            <h2 className="heritage-font text-[#d4af37] text-xl font-bold tracking-widest uppercase">Quản lý Dự án (Blueprints)</h2>
+            <p className="code-font text-[9px] text-[#a39e93] uppercase tracking-widest mt-1">Cấu hình nhân sự và phạm vi Giao thức</p>
+          </div>
+          <button onClick={() => setIsCreatingProject(true)} className="bg-[#00f2ff] text-[#0d0b0a] px-5 py-2.5 rounded font-black text-[10px] heritage-font hover:bg-white transition-all uppercase shadow-[0_0_20px_rgba(0,242,255,0.2)]">
+            + KHỞI TẠO DỰ ÁN
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[11px] border-collapse">
+            <thead>
+              <tr className="bg-[#0d0b0a] text-[#a39e93] border-b border-[#d4af37]/10">
+                <th className="p-4 uppercase tracking-tighter w-12">#</th>
+                <th className="p-4 uppercase tracking-widest">ID Dự án</th>
+                <th className="p-4 uppercase tracking-widest">Tên Dự Án</th>
+                <th className="p-4 uppercase tracking-widest text-center">Cố vấn</th>
+                <th className="p-4 uppercase tracking-widest text-center">Hội viên</th>
+                <th className="p-4 uppercase tracking-widest text-center">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {projects.length === 0 ? (
+                <tr><td colSpan={6} className="p-20 text-center code-font text-[#a39e93] opacity-30 tracking-[0.5em] uppercase italic">CHƯA CÓ DỰ ÁN TRÊN HỆ THỐNG</td></tr>
+              ) : projects.map((p, i) => (
+                <tr key={p.id} className="border-b border-[#d4af37]/5 hover:bg-[#d4af37]/5 transition-colors group">
+                  <td className="p-4 code-font text-[#a39e93]">{i + 1}</td>
+                  <td className="p-4 code-font text-[#00f2ff] font-bold neon-blue-glow">{p.id}</td>
+                  <td className="p-4">
+                    <div className="font-bold text-[#f2ede4] heritage-font tracking-widest">{p.name}</div>
+                  </td>
+                  <td className="p-4 text-center">
+                    <span className="bg-[#00f2ff]/10 text-[#00f2ff] px-2 py-1 rounded text-[10px] font-bold border border-[#00f2ff]/20">{p.staffIds.length}</span>
+                  </td>
+                  <td className="p-4 text-center">
+                    <span className="bg-[#d4af37]/10 text-[#d4af37] px-2 py-1 rounded text-[10px] font-bold border border-[#d4af37]/20">{p.clientIds.length}</span>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center justify-center gap-3">
+                      <button onClick={() => setEditingProject(p)} className="px-4 py-1.5 rounded-lg bg-[#d4af37]/10 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d0b0a] transition-all border border-[#d4af37]/20 text-[9px] font-black tracking-widest heritage-font">
+                        GÁN NHÂN SỰ
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderUserManager = () => (
+    <div className="animate-in fade-in duration-500 space-y-6">
+      <div className="overflow-hidden bg-[#1a1412] border border-[#d4af37]/20 rounded-2xl lacquer-gloss shadow-2xl">
+        <div className="p-6 border-b border-[#d4af37]/20 flex justify-between items-center bg-[#0d0b0a]/50">
+          <div>
+            <h2 className="heritage-font text-[#d4af37] text-xl font-bold tracking-widest uppercase">Quản lý Danh tính (Users)</h2>
+            <p className="code-font text-[9px] text-[#a39e93] uppercase tracking-widest mt-1">Quản trị phân quyền và bảo mật Node</p>
+          </div>
+          <button onClick={() => setIsCreatingUser(true)} className="bg-[#d4af37] text-[#0d0b0a] px-5 py-2.5 rounded font-black text-[10px] heritage-font hover:bg-white transition-all uppercase shadow-[0_0_20px_rgba(212,175,55,0.2)]">
+            + THÊM DANH TÍNH
+          </button>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-[11px] border-collapse">
+            <thead>
+              <tr className="bg-[#0d0b0a] text-[#a39e93] border-b border-[#d4af37]/10">
+                <th className="p-4 uppercase tracking-tighter w-12">#</th>
+                <th className="p-4 uppercase tracking-widest">ID Node</th>
+                <th className="p-4 uppercase tracking-widest">Vai Trò</th>
+                <th className="p-4 uppercase tracking-widest">Họ Tên / Công Ty</th>
+                <th className="p-4 uppercase tracking-widest text-center">Thao tác</th>
+              </tr>
+            </thead>
+            <tbody>
+              {users.map((u, i) => (
+                <tr key={u.id} className="border-b border-[#d4af37]/5 hover:bg-[#d4af37]/5 transition-colors">
+                  <td className="p-4 text-[#a39e93] font-bold">{i + 1}</td>
+                  <td className="p-4 code-font text-[#00f2ff] font-bold">{u.id}</td>
+                  <td className="p-4">
+                    <span className={`px-2 py-0.5 rounded text-[8px] font-black border uppercase ${u.role === 'ADMIN' ? 'border-[#c41e3a] text-[#c41e3a]' : 'border-[#d4af37] text-[#d4af37]'}`}>
+                      {u.role}
+                    </span>
+                  </td>
+                  <td className="p-4">
+                    <div className="font-bold text-[#f2ede4]">{u.fullName || u.username}</div>
+                    <div className="text-[9px] text-[#a39e93] mt-1 italic uppercase opacity-70 tracking-tight">
+                      <i className="fa-solid fa-briefcase mr-1 text-[#d4af37]/40"></i> {u.company || 'Corporate Node'}
+                    </div>
+                  </td>
+                  <td className="p-4">
+                    <div className="flex items-center justify-center gap-4">
+                      <button onClick={() => setEditingUser(u)} className="w-8 h-8 rounded-lg bg-[#d4af37]/10 text-[#d4af37] hover:bg-[#d4af37] hover:text-[#0d0b0a] transition-all flex items-center justify-center border border-[#d4af37]/20" title="Chỉnh sửa"><i className="fa-solid fa-user-pen text-xs"></i></button>
+                      <button onClick={() => onDeleteUser(u.id)} className="w-8 h-8 rounded-lg bg-[#c41e3a]/10 text-[#c41e3a] hover:bg-[#c41e3a] hover:text-white transition-all flex items-center justify-center border border-[#c41e3a]/20" title="Xóa"><i className="fa-solid fa-user-slash text-xs"></i></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+
+  const renderContent = () => {
+    switch(view) {
+      case 'manage-users':
+        return renderUserManager();
+      case 'manage-projects':
+        return renderProjectManager();
+      case 'system-settings':
+        return (
+          <div className="bg-[#1a1412] p-12 rounded-2xl border border-[#d4af37]/20 text-center animate-in fade-in">
+             <i className="fa-solid fa-sliders text-[#d4af37] text-4xl mb-4"></i>
+             <h3 className="heritage-font text-xl text-white mb-2">CẤU HÌNH HỆ THỐNG</h3>
+             <p className="code-font text-[10px] text-[#a39e93] uppercase tracking-widest">Vui lòng sử dụng Settings Modal từ Sidebar để cấu hình API Giao thức.</p>
+          </div>
+        );
+      default:
+        return renderUserManager();
+    }
+  };
+
+  return (
+    <div className="flex-1 overflow-auto p-2 scrollbar-thin">
+      {renderContent()}
+      
+      {/* Modals */}
+      {renderTeamConfigModal()}
+      {editingUser && renderUserModal(editingUser, true)}
+      {isCreatingUser && renderUserModal(newUser, false)}
+      
+      {isCreatingProject && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#050404]/95 backdrop-blur-xl">
+          <div className="bg-[#1a1412] rounded-2xl border border-[#00f2ff]/40 p-0 w-full max-w-md shadow-[0_0_100px_rgba(0,0,0,1)] lacquer-gloss animate-in zoom-in duration-200">
+             <div className="bg-[#0d0b0a] p-6 border-b border-[#00f2ff]/20 flex justify-between items-center">
+               <h3 className="heritage-font text-[#00f2ff] text-lg font-bold tracking-widest flex items-center gap-3">
+                 <i className="fa-solid fa-diagram-project"></i> KHỞI TẠO DỰ ÁN MỚI
+               </h3>
+               <button onClick={() => setIsCreatingProject(false)} className="text-[#a39e93] hover:text-[#c41e3a] transition-all"><i className="fa-solid fa-xmark text-xl"></i></button>
+             </div>
+             <div className="p-8 space-y-5">
+               <div className="space-y-1.5">
+                 <label className="code-font text-[9px] font-black text-[#a39e93] uppercase tracking-widest">Mã Dự Án (ID)</label>
+                 <input type="text" value={newProject.id} onChange={(e) => setNewProject({...newProject, id: e.target.value})} className="w-full bg-[#0d0b0a] border border-[#00f2ff]/30 rounded-lg p-3 text-xs text-[#00f2ff] outline-none code-font font-bold" placeholder="P-EXAMPLE" />
+               </div>
+               <div className="space-y-1.5">
+                 <label className="code-font text-[9px] font-black text-[#d4af37] uppercase tracking-widest">Tên Dự Án (Blueprint Name)</label>
+                 <input type="text" value={newProject.name} onChange={(e) => setNewProject({...newProject, name: e.target.value})} className="w-full bg-[#0d0b0a] border border-[#d4af37]/30 rounded-lg p-3 text-xs text-[#f2ede4] outline-none focus:border-[#00f2ff] transition-all" placeholder="Tên dự án chiến lược..." />
+               </div>
+             </div>
+             <div className="p-6 bg-[#0d0b0a] flex gap-4 border-t border-[#00f2ff]/10">
+               <button onClick={() => setIsCreatingProject(false)} className="flex-1 py-3 text-[#a39e93] text-[10px] heritage-font tracking-[0.2em] uppercase hover:text-white">HỦY BỎ</button>
+               <button onClick={handleCreateProjectSubmit} className="flex-1 py-3 bg-[#00f2ff] text-[#0d0b0a] rounded font-black text-[10px] heritage-font tracking-[0.2em] uppercase hover:bg-white shadow-[0_0_20px_rgba(0,242,255,0.3)]">KHỞI TẠO DỰ ÁN</button>
+             </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminPanel;
