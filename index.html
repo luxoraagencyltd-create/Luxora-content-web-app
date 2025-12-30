@@ -1,15 +1,13 @@
-
 <!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Luxora | Lacquer-Punk Protocol</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Vite sẽ tự xử lý Tailwind, không cần script CDN này nếu bạn đã cài npm install tailwindcss -->
+    <!-- <script src="https://cdn.tailwindcss.com"></script> --> 
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" href="/assets/favicon.ico">
-    <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
-    <link rel="apple-touch-icon" href="/assets/logo-192.png">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
         
@@ -54,41 +52,18 @@
             text-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
         }
 
-        /* Custom scrollbar for webkit */
-        ::-webkit-scrollbar {
-            width: 5px;
-            height: 5px;
-        }
-        ::-webkit-scrollbar-track {
-            background: var(--lacquer-black);
-        }
-        ::-webkit-scrollbar-thumb {
-            background: var(--bamboo);
-            border-radius: 10px;
-        }
-        ::-webkit-scrollbar-thumb:hover {
-            background: var(--gold-dark);
-        }
+        /* Custom scrollbar */
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: var(--lacquer-black); }
+        ::-webkit-scrollbar-thumb { background: var(--bamboo); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--gold-dark); }
 
-        #root {
-            height: 100vh;
-        }
+        #root { height: 100vh; }
     </style>
-<script type="importmap">
-{
-  "imports": {
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react": "https://esm.sh/react@^19.2.3",
-    "firebase/": "https://esm.sh/firebase@^12.7.0/",
-    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "vite": "https://esm.sh/vite@^7.3.0",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/"
-  }
-}
-</script>
 </head>
 <body>
     <div id="root"></div>
-    <script type="module" src="/index.tsx"></script>
+    <!-- Vite tự động xử lý file này -->
+    <script type="module" src="/src/index.tsx"></script>
 </body>
 </html>

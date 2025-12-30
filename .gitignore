@@ -6,3 +6,5 @@ dist-ssr
 .vscode
 .DS_Store
 auth.json
+.vercel
+.env*.local

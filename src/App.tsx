@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Task, ReviewMessage, LogEntry, Project, User, Issue } from './types';
 import { db } from './lib/firebase';
@@ -6,7 +5,6 @@ import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firesto
 import Sidebar from './components/Sidebar';
 import SheetSimulator from './components/SheetSimulator';
 import ReviewPortal from './components/ReviewPortal';
-// removed unused WorkflowVisualizer import
 import LogPanel from './components/LogPanel';
 import Login from './components/Login';
 import AdminPanel from './components/AdminPanel';
@@ -15,6 +13,14 @@ import ClientVisuals from './components/ClientVisuals';
 import IssueLog from './components/IssueLog';
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbw7HIgfEnoIkUOWFB-xU7dlyno84OaSWrdvJ3LXlX9KryXRJ7uobHzShg6MCoEzbIdh-Q/exec";
+
+// --- SỬA LỖI 3: Di chuyển ScoreCard lên trên App để tránh lỗi "used before declaration" ---
+const ScoreCard = ({ label, count, color, active, onClick }: { label: string, count: number, color: string, active: boolean, onClick: () => void }) => (
+  <button onClick={onClick} className={`p-4 rounded-xl border flex flex-col items-center gap-1 transition-all group ${active ? 'bg-white text-[#0d0b0a] border-white scale-105 shadow-[0_0_20px_rgba(255,255,255,0.2)]' : 'bg-[#1a1412] border-[#d4af37]/10'}`}>
+    <span className="code-font text-[8px] font-black tracking-[0.2em] uppercase" style={{ color: active ? '#0d0b0a' : color }}>{label}</span>
+    <span className="heritage-font text-2xl font-bold tracking-widest">{count}</span>
+  </button>
+);
 
 const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -34,58 +40,15 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<ReviewMessage[]>([]);
   const [appConfig, setAppConfig] = useState<{googleSheetUrl: string; webAppUrl: string}>({ googleSheetUrl: '', webAppUrl: '' });
 
-  // 1. Lấy dữ liệu Real-time từ Firebase cho Users và Projects
-  useEffect(() => {
-    const unsubUsers = onSnapshot(collection(db, 'users'), async (snapshot) => {
-      const usersData = snapshot.docs.map(doc => doc.data() as User);
-      setUsers(usersData);
-
-      // If collection is empty, seed with sample users for testing
-      if (usersData.length === 0) {
-        try {
-          const sampleUsers: User[] = [
-            { id: 'admin', username: 'admin', role: 'ADMIN', company: 'Sample', password: '123', fullName: 'Administrator' },
-            { id: 'staff1', username: 'staff1', role: 'STAFF', company: 'Sample', password: '123', fullName: 'Staff One' },
-            { id: 'staff2', username: 'staff2', role: 'STAFF', company: 'Sample', password: '123', fullName: 'Staff Two' },
-            { id: 'staff3', username: 'staff3', role: 'STAFF', company: 'Sample', password: '123', fullName: 'Staff Three' },
-            { id: 'client1', username: 'client1', role: 'CLIENT', company: 'Sample', password: '123', fullName: 'Client One' },
-            { id: 'client2', username: 'client2', role: 'CLIENT', company: 'Sample', password: '123', fullName: 'Client Two' },
-            { id: 'client3', username: 'client3', role: 'CLIENT', company: 'Sample', password: '123', fullName: 'Client Three' }
-          ];
-
-          for (const u of sampleUsers) {
-            await setDoc(doc(db, 'users', u.id), u);
-          }
-
-          // Create a sample group/document to collect staff+client IDs for easy sharing
-          const sampleMemberIds = sampleUsers.filter(s => s.role !== 'ADMIN').map(s => s.id);
-          await setDoc(doc(db, 'samples', 'test-users'), { memberIds: sampleMemberIds });
-        } catch (err) {
-          console.error('Seeding sample users failed:', err);
-        }
-      }
-    });
-    const unsubProjects = onSnapshot(collection(db, 'projects'), (snapshot) => {
-      const projectsData = snapshot.docs.map(doc => doc.data() as Project);
-      setProjects(projectsData);
-    });
-    const configDoc = doc(db, 'config', 'app');
-    const unsubConfig = onSnapshot(configDoc, (snap) => {
-      if (snap.exists()) setAppConfig(snap.data() as any);
-    });
-    return () => { unsubUsers(); unsubProjects(); unsubConfig(); };
-  }, []);
-
-  const handleUpdateConfig = async (c: {googleSheetUrl: string; webAppUrl: string}) => {
-    await setDoc(doc(db, 'config', 'app'), c);
-    addLog('Cấu hình hệ thống đã được lưu.', 'SUCCESS');
-  };
+  // --- SỬA LỖI 1: Di chuyển currentProject lên TRƯỚC syncWithSheet ---
+  const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
 
   const addLog = useCallback((event: string, type: 'INFO' | 'SUCCESS' | 'WARNING' = 'INFO') => {
     const newLog: LogEntry = { id: Math.random().toString(), projectId: selectedProjectId || 'SYSTEM', timestamp: new Date(), event, type };
     setLogs(prev => [newLog, ...prev].slice(0, 50));
   }, [selectedProjectId]);
 
+  // --- SỬA LỖI 4: Đảm bảo cú pháp try/catch/finally đúng ---
   const syncWithSheet = useCallback(async () => {
     if (!selectedProjectId) return;
     setIsLoading(true);
@@ -93,15 +56,21 @@ const App: React.FC = () => {
     
     try {
       const scriptUrl = currentProject?.webAppUrl || appConfig.webAppUrl || APPS_SCRIPT_URL;
-      const proxyUrl = `/api/proxy?action=getAllData&projectId=${encodeURIComponent(selectedProjectId)}${scriptUrl ? `&target=${encodeURIComponent(scriptUrl)}` : ''}`;
-      const response = await fetch(proxyUrl);
+      
+      // Check môi trường để gọi Proxy hoặc gọi trực tiếp (như đã hướng dẫn ở bài trước)
+      let finalUrl;
+      // Dùng proxy nếu đang chạy dev hoặc production Vercel
+      finalUrl = `/api/proxy?action=getAllData&projectId=${encodeURIComponent(selectedProjectId)}&target=${encodeURIComponent(scriptUrl)}`;
+
+      const response = await fetch(finalUrl);
       const text = await response.text();
+      
       let result: any;
       try {
         result = JSON.parse(text);
       } catch (err) {
         console.error('Sync Error: Non-JSON response from proxy:', text);
-        addLog('Giao thức đồng bộ thất bại: phản hồi không phải JSON. Kiểm tra Console/Logs.', 'WARNING');
+        addLog('Giao thức đồng bộ thất bại: phản hồi không phải JSON. Kiểm tra Console.', 'WARNING');
         setIsLoading(false);
         return;
       }
@@ -167,7 +136,40 @@ const App: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [selectedProjectId, addLog, appConfig]);
+  }, [selectedProjectId, addLog, appConfig, currentProject]); // Đã thêm currentProject vào deps
+
+  // 1. Lấy dữ liệu Real-time từ Firebase cho Users và Projects
+  useEffect(() => {
+    const unsubUsers = onSnapshot(collection(db, 'users'), async (snapshot) => {
+      const usersData = snapshot.docs.map(doc => doc.data() as User);
+      setUsers(usersData);
+
+      // Seed sample data if empty
+      if (usersData.length === 0) {
+        try {
+          const sampleUsers: User[] = [
+            { id: 'admin', username: 'admin', role: 'ADMIN', company: 'Sample', password: '123', fullName: 'Administrator' },
+            { id: 'staff1', username: 'staff1', role: 'STAFF', company: 'Sample', password: '123', fullName: 'Staff One' },
+            { id: 'client1', username: 'client1', role: 'CLIENT', company: 'Sample', password: '123', fullName: 'Client One' },
+          ];
+          for (const u of sampleUsers) {
+            await setDoc(doc(db, 'users', u.id), u);
+          }
+        } catch (err) {
+          console.error('Seeding failed:', err);
+        }
+      }
+    });
+    const unsubProjects = onSnapshot(collection(db, 'projects'), (snapshot) => {
+      const projectsData = snapshot.docs.map(doc => doc.data() as Project);
+      setProjects(projectsData);
+    });
+    const configDoc = doc(db, 'config', 'app');
+    const unsubConfig = onSnapshot(configDoc, (snap) => {
+      if (snap.exists()) setAppConfig(snap.data() as any);
+    });
+    return () => { unsubUsers(); unsubProjects(); unsubConfig(); };
+  }, []);
 
   useEffect(() => {
     if (selectedProjectId) syncWithSheet();
@@ -201,6 +203,11 @@ const App: React.FC = () => {
     addLog(`Node ${userId} đã bị xóa khỏi hệ thống.`, 'WARNING');
   };
 
+  const handleUpdateConfig = async (c: {googleSheetUrl: string; webAppUrl: string}) => {
+    await setDoc(doc(db, 'config', 'app'), c);
+    addLog('Cấu hình hệ thống đã được lưu.', 'SUCCESS');
+  };
+
   const handleSendMessage = (text: string, replyToId?: string, taggedIds?: string[]) => {
     if (!selectedProjectId || !currentUser) return;
     const newMsg: ReviewMessage = {
@@ -230,10 +237,7 @@ const App: React.FC = () => {
     }
   };
 
-  const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
   const currentTabTasks = useMemo(() => tasks.filter(t => t.tab === activeTab), [tasks, activeTab]);
-
-  
 
   const stats = useMemo(() => ({
     done: tasks.filter(t => t.status === 'Done').length,
@@ -316,12 +320,5 @@ const App: React.FC = () => {
     </div>
   );
 };
-
-const ScoreCard = ({ label, count, color, active, onClick }: { label: string, count: number, color: string, active: boolean, onClick: () => void }) => (
-  <button onClick={onClick} className={`p-4 rounded-xl border flex flex-col items-center gap-1 transition-all group ${active ? 'bg-white text-[#0d0b0a] border-white scale-105 shadow-[0_0_20px_rgba(255,255,255,0.2)]' : 'bg-[#1a1412] border-[#d4af37]/10'}`}>
-    <span className="code-font text-[8px] font-black tracking-[0.2em] uppercase" style={{ color: active ? '#0d0b0a' : color }}>{label}</span>
-    <span className="heritage-font text-2xl font-bold tracking-widest">{count}</span>
-  </button>
-);
 
 export default App;
