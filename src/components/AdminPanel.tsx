@@ -1,5 +1,4 @@
-
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { User, Project, AppConfig, UserRole } from '../types';
 import { setDoc, doc } from 'firebase/firestore';
 import { db } from '../lib/firebase';
@@ -92,94 +91,6 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
       setNewProject({ id: 'P-', name: '', color: 'gold-leaf' });
     }
   };
-
-  // ---- Import users from file (Excel / CSV) ----
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-  const [importStatus, setImportStatus] = useState<string | null>(null);
-  const [importErrors, setImportErrors] = useState<string[]>([]);
-
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const normalizeKey = (k: string) => k.trim().toLowerCase();
-
-  const handleFile = async (file?: File) => {
-    if (!file) return;
-    setImportStatus('Reading file...');
-    setImportErrors([]);
-
-    try {
-      const data = await file.arrayBuffer();
-      const xlsx = await import('xlsx');
-      const workbook = xlsx.read(data, { type: 'array' });
-      const sheet = workbook.Sheets[workbook.SheetNames[0]];
-      const rows: any[] = xlsx.utils.sheet_to_json(sheet, { defval: '' });
-
-      if (!rows || rows.length === 0) {
-        setImportStatus('No rows found in file.');
-        return;
-      }
-
-      const required = ['id node', 'vai trò', 'họ và tên', 'công ty', 'username', 'pass'];
-      const createdIds: string[] = [];
-      const errors: string[] = [];
-
-      for (let i = 0; i < rows.length; i++) {
-        const raw = rows[i];
-        // map keys to lowercase
-        const obj: Record<string, any> = {};
-        Object.keys(raw).forEach(k => (obj[normalizeKey(String(k))] = raw[k]));
-
-        const id = (obj['id node'] || obj['id'] || obj['node id'] || obj['nodeid'] || obj['node'])?.toString().trim();
-        const roleRaw = (obj['vai trò'] || obj['role'] || obj['vaitro'] || obj['vai-tro'])?.toString().trim();
-        const fullName = (obj['họ và tên'] || obj['ho va ten'] || obj['fullname'] || obj['full name'])?.toString().trim();
-        const company = (obj['công ty'] || obj['cong ty'] || obj['company'])?.toString().trim() || 'Sample';
-        const username = (obj['username'] || obj['user'] || obj['login'])?.toString().trim();
-        const pass = (obj['pass'] || obj['password'] || obj['pwd'])?.toString();
-
-        const rowLabel = `row ${i + 2}`; // header is row 1
-
-        if (!id) { errors.push(`${rowLabel}: missing ID node`); continue; }
-        if (!roleRaw) { errors.push(`${rowLabel}: missing Vai trò`); continue; }
-        if (!username) { errors.push(`${rowLabel}: missing username`); continue; }
-        if (!pass) { errors.push(`${rowLabel}: missing pass`); continue; }
-
-        const role = (roleRaw.toUpperCase().startsWith('A') ? 'ADMIN' : roleRaw.toUpperCase().startsWith('S') ? 'STAFF' : 'CLIENT') as UserRole;
-
-        const user: User = {
-          id,
-          username: username || id,
-          role,
-          company,
-          password: pass || '123',
-          fullName: fullName || username || id
-        };
-
-        try {
-          await onCreateUser(user);
-          createdIds.push(id);
-        } catch (err: any) {
-          errors.push(`${rowLabel}: failed to create ${id} — ${err?.message ?? err}`);
-        }
-      }
-
-      // create samples/test-users doc listing staff+client ids
-      try {
-        const sampleMemberIds = createdIds.filter(id => !id.toLowerCase().startsWith('admin'));
-        await setDoc(doc(db, 'samples', 'test-users'), { memberIds: sampleMemberIds });
-      } catch (err) {
-        // non-fatal
-        console.error('Could not write samples/test-users', err);
-      }
-
-      setImportErrors(errors);
-      setImportStatus(`Imported ${createdIds.length} users; ${errors.length} errors.`);
-    } catch (err: any) {
-      setImportStatus('Import failed: ' + (err?.message ?? err));
-    }
-  };
-
 
   const renderUserModal = (user: User, isEdit: boolean) => {
     const title = isEdit ? "CHỈNH SỬA DANH TÍNH" : "KHỞI TẠO DANH TÍNH MỚI";

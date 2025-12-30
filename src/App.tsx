@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Task, ReviewMessage, LogEntry, Project, User, Issue } from './types';
 import { db } from './lib/firebase';
-import { collection, onSnapshot, doc, setDoc, deleteDoc } from 'firebase/firestore';
+// 👇 1. THÊM CÁC HÀM FIREBASE CẦN THIẾT
+import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import Sidebar from './components/Sidebar';
 import SheetSimulator from './components/SheetSimulator';
 import ReviewPortal from './components/ReviewPortal';
@@ -13,8 +14,6 @@ import ClientVisuals from './components/ClientVisuals';
 import IssueLog from './components/IssueLog';
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFTCYBBwC2s0Cu0KQkAjnJ15P9FmQx68orggfKhUtRMiA-VP2EaXWfruOCTfEmXdDUkQ/exec";
-
-// Âm thanh thông báo
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 const ScoreCard = ({ label, count, color, active, onClick }: { label: string, count: number, color: string, active: boolean, onClick: () => void }) => (
@@ -33,7 +32,6 @@ const App: React.FC = () => {
   const [dateRange, setDateRange] = useState({ start: '2025-01-01', end: '2026-12-31' });
   const [activeTab, setActiveTab] = useState<'05' | '06'>('05'); 
   
-  // ĐÃ XÓA waitingForFeedback VÌ KHÔNG DÙNG ĐẾN
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -48,7 +46,6 @@ const App: React.FC = () => {
   const [pendingFeedbackTask, setPendingFeedbackTask] = useState<string | null>(null); 
   const [feedbackAccumulator, setFeedbackAccumulator] = useState<string[]>([]); 
 
-  // Ref để lock tránh double trigger
   const isFetchingRef = useRef(false);
   const prevTasksRef = useRef<Task[]>([]);
 
@@ -63,6 +60,37 @@ const App: React.FC = () => {
       }
     }
   }, [currentUser]);
+
+  // --- 2. LẮNG NGHE TIN NHẮN TỪ FIREBASE ---
+  useEffect(() => {
+    if (!selectedProjectId) {
+      setMessages([]);
+      return;
+    }
+
+    // Tạo query: Lấy tin nhắn của Project hiện tại, sắp xếp theo thời gian
+    const q = query(
+      collection(db, 'messages'),
+      where('projectId', '==', selectedProjectId),
+      orderBy('timestamp', 'asc'),
+      limit(100) // Giới hạn 100 tin nhắn gần nhất để đỡ nặng
+    );
+
+    const unsubMessages = onSnapshot(q, (snapshot) => {
+      const msgs = snapshot.docs.map(doc => {
+        const data = doc.data();
+        return {
+          ...data,
+          id: doc.id,
+          // Chuyển đổi Firestore Timestamp về JS Date
+          timestamp: data.timestamp instanceof Timestamp ? data.timestamp.toDate() : new Date(data.timestamp)
+        } as ReviewMessage;
+      });
+      setMessages(msgs);
+    });
+
+    return () => unsubMessages();
+  }, [selectedProjectId]);
 
   useEffect(() => {
     if (!selectedProjectId) return;
@@ -96,6 +124,24 @@ const App: React.FC = () => {
     const newLog: LogEntry = { id: Math.random().toString(), projectId: selectedProjectId || 'SYSTEM', timestamp: new Date(), event, type };
     setLogs(prev => [newLog, ...prev].slice(0, 50));
   }, [selectedProjectId]);
+
+  // --- HÀM GỬI THÔNG BÁO LÊN FIREBASE ---
+  const createSystemNotification = async (taskName: string, taskId: string) => {
+    if (!selectedProjectId) return;
+    try {
+      await addDoc(collection(db, 'messages'), {
+        projectId: selectedProjectId,
+        senderId: 'SYSTEM',
+        senderName: 'HỆ THỐNG',
+        senderRole: 'ADMIN',
+        text: `[${taskId}] [${taskName}]\ncần review`,
+        timestamp: new Date(),
+        type: 'NOTIFICATION'
+      });
+    } catch (e) {
+      console.error("Error sending notification:", e);
+    }
+  };
 
   const syncWithSheet = useCallback(async (isSilent = false) => {
     if (!selectedProjectId) return;
@@ -189,6 +235,7 @@ const App: React.FC = () => {
          }));
       }
 
+      // Logic Trigger (Bây giờ sẽ gọi hàm lưu lên Firebase)
       if (prevTasksRef.current.length > 0) {
         const triggeredIds = new Set();
         fetchedTasks.forEach(newTask => {
@@ -197,17 +244,8 @@ const App: React.FC = () => {
                 if (!triggeredIds.has(newTask.id)) {
                     triggeredIds.add(newTask.id);
                     playSound();
-                    const triggerMsg: ReviewMessage = {
-                        id: Math.random().toString(),
-                        projectId: selectedProjectId,
-                        senderId: 'SYSTEM',
-                        senderName: 'HỆ THỐNG',
-                        senderRole: 'ADMIN',
-                        text: `[${newTask.id}] [${newTask.name}]\ncần review`, 
-                        timestamp: new Date(),
-                        type: 'NOTIFICATION'
-                    };
-                    setMessages(prev => [...prev, triggerMsg]);
+                    // 👇 GỌI HÀM LƯU LÊN FIREBASE
+                    createSystemNotification(newTask.name, newTask.id);
                     addLog(`🔔 New Trigger: ${newTask.id} cần review!`, 'SUCCESS');
                 }
             }
@@ -234,7 +272,7 @@ const App: React.FC = () => {
     return () => { unsubUsers(); unsubProjects(); unsubConfig(); };
   }, []);
 
-  useEffect(() => { if (selectedProjectId) syncWithSheet(); }, [selectedProjectId]); // Bỏ syncWithSheet khỏi dependency để tránh loop
+  useEffect(() => { if (selectedProjectId) syncWithSheet(); }, [selectedProjectId]); 
 
   const handleUpdateProject = async (p: Project) => await setDoc(doc(db, 'projects', p.id), p);
   const handleCreateProject = async (p: Partial<Project>) => await setDoc(doc(db, 'projects', p.id || `P-${Date.now()}`), { ...p, id: p.id || `P-${Date.now()}`, clientIds: [], staffIds: [] } as Project);
@@ -268,7 +306,6 @@ const App: React.FC = () => {
         const draft = `[${task.id}] [${task.name}]\nCần sửa với nội dung: `;
         setChatDraft(draft);
         setPendingFeedbackTask(taskId);
-        // Đã xóa setWaitingForFeedback ở đây vì không còn dùng biến này nữa
         setFeedbackAccumulator([]); 
         addLog(`Bắt đầu phiên Feedback cho Node ${taskId}...`, 'INFO');
       }
@@ -300,31 +337,38 @@ const App: React.FC = () => {
       }
 
       setPendingFeedbackTask(null);
-      // Đã xóa setWaitingForFeedback(null)
       setFeedbackAccumulator([]);
     }
   };
 
+  // --- 3. SỬA HÀM GỬI TIN NHẮN (ĐẨY LÊN FIREBASE) ---
   const handleSendMessage = async (text: string, replyToId?: string, taggedIds?: string[]) => {
     if (!selectedProjectId || !currentUser) return;
     
-    const newMsg: ReviewMessage = {
-      id: Math.random().toString(),
-      projectId: selectedProjectId,
-      senderId: currentUser.id,
-      senderName: currentUser.fullName || currentUser.username,
-      senderRole: currentUser.role,
-      text,
-      timestamp: new Date(),
-      type: 'CHAT',
-      replyToId,
-      taggedUserIds: taggedIds
-    };
-    setMessages(prev => [...prev, newMsg]);
-    setChatDraft(''); 
+    // Gửi tin nhắn lên Firebase
+    try {
+      await addDoc(collection(db, 'messages'), {
+        projectId: selectedProjectId,
+        senderId: currentUser.id,
+        senderName: currentUser.fullName || currentUser.username,
+        senderRole: currentUser.role,
+        text,
+        timestamp: new Date(),
+        type: 'CHAT',
+        replyToId: replyToId || null,
+        taggedUserIds: taggedIds || []
+      });
+      
+      // Clear input (Logic clear nằm ở ReviewPortal, ở đây chỉ xử lý logic gửi)
+      // Local state messages sẽ tự update nhờ onSnapshot ở trên
+      setChatDraft(''); 
 
-    if (pendingFeedbackTask) {
-       setFeedbackAccumulator(prev => [...prev, text]);
+      if (pendingFeedbackTask) {
+         setFeedbackAccumulator(prev => [...prev, text]);
+      }
+    } catch (e) {
+      console.error("Error sending message:", e);
+      addLog("Lỗi gửi tin nhắn", "WARNING");
     }
   };
 
