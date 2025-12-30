@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { User, Project, AppConfig, UserRole } from '../types';
-import { setDoc, doc } from 'firebase/firestore';
-import { db } from '../lib/firebase';
 
 interface Props {
   view: string;
