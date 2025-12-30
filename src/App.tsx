@@ -69,14 +69,38 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!selectedProjectId) { setMessages([]); return; }
-    const q = query(collection(db, 'messages'), where('projectId', '==', selectedProjectId), orderBy('timestamp', 'asc'), limit(100));
-    const unsubMessages = onSnapshot(q, (snapshot) => {
-      const msgs = snapshot.docs.map(doc => {
-        const data = doc.data();
-        return { ...data, id: doc.id, timestamp: data.timestamp instanceof Timestamp ? data.timestamp.toDate() : new Date(data.timestamp) } as ReviewMessage;
-      });
-      setMessages(msgs);
-    });
+    // Query: Lấy tin nhắn của Project, sắp xếp cũ -> mới
+    const q = query(
+      collection(db, 'messages'),
+      where('projectId', '==', selectedProjectId),
+      orderBy('timestamp', 'asc'),
+      limit(100)
+    );
+
+    // 👇 THÊM PHẦN ERROR HANDLER VÀO onSnapshot
+    const unsubMessages = onSnapshot(q, 
+      (snapshot) => {
+        const msgs = snapshot.docs.map(doc => {
+          const data = doc.data();
+          return {
+            ...data,
+            id: doc.id,
+            // Convert an toàn: Nếu là Timestamp của Firebase thì đổi, không thì dùng new Date
+            timestamp: data.timestamp?.toDate ? data.timestamp.toDate() : new Date(data.timestamp)
+          } as ReviewMessage;
+        });
+        setMessages(msgs);
+        console.log("Đã tải được", msgs.length, "tin nhắn.");
+      },
+      (error) => {
+        console.error("Lỗi tải tin nhắn:", error);
+        // 👇 QUAN TRỌNG: Nếu lỗi do thiếu Index, dòng này sẽ hiện link
+        if (error.message.includes("indexes")) {
+           addLog("Hệ thống thiếu Index. Hãy mở Console (F12) để lấy link tạo Index.", "WARNING");
+        }
+      }
+    );
+
     return () => unsubMessages();
   }, [selectedProjectId]);
 
