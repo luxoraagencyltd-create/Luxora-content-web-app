@@ -8,21 +8,27 @@ interface Props {
   setDateRange: (range: { start: string, end: string }) => void;
 }
 
-const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange }) => {
+const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
   
+  // Hàm format hiển thị ngày (YYYY-MM-DD -> DD/MM/YYYY)
+  const formatDateDisplay = (isoDate: string) => {
+    if (!isoDate) return 'N/A';
+    const [y, m, d] = isoDate.split('-');
+    return `${d}/${m}/${y}`;
+  };
+
+  // Hàm xử lý ngày tháng chuẩn
   const parseDate = (dStr: string) => {
-    if (!dStr || dStr === 'N/A') return new Date();
+    if (!dStr || dStr === 'N/A') return new Date(1970, 0, 1);
     const d = new Date(dStr);
     if (!isNaN(d.getTime())) return d;
     try {
       const [day, month, year] = dStr.split('/');
       const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
       const mIdx = months.findIndex(m => m.toLowerCase() === (month || '').toLowerCase());
-      if (mIdx === -1) return new Date();
+      if (mIdx === -1) return new Date(1970, 0, 1);
       return new Date(parseInt(year), mIdx, parseInt(day));
-    } catch (e) {
-      return new Date();
-    }
+    } catch (e) { return new Date(1970, 0, 1); }
   };
 
   const today = useMemo(() => {
@@ -31,13 +37,14 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
     return d;
   }, []);
 
-  // LỌC TASK: Chỉ lấy tab 05 và có ID
+  // 1. LỌC TASK THEO NGÀY (Plan End)
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
       if (t.tab !== '05' || !t.id) return false;
       const taskDate = parseDate(t.planEnd);
       const start = new Date(dateRange.start);
       const end = new Date(dateRange.end);
+      // Reset giờ
       taskDate.setHours(0,0,0,0);
       start.setHours(0,0,0,0);
       end.setHours(0,0,0,0);
@@ -45,27 +52,32 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
     });
   }, [tasks, dateRange]);
 
-  // --- LOGIC MỚI CHO ISSUE ---
-  
-  // 1. Lọc danh sách Issue hợp lệ (phải có Tên vấn đề và ID)
-  // Loại bỏ các dòng ID rỗng hoặc chỉ có ID mà không có nội dung
-  const validIssues = useMemo(() => {
-    return issues.filter(i => i.id && i.summary && i.summary.trim() !== '');
-  }, [issues]);
+  // 2. LỌC ISSUE THEO NGÀY (Due Date hoặc Date Raised)
+  // Để biểu đồ rủi ro cũng chạy theo bộ lọc thời gian
+  const filteredIssues = useMemo(() => {
+    return issues.filter(i => {
+       // Lọc rác
+       if (!i.id || !i.summary) return false;
+       
+       // Lọc ngày
+       const issueDate = parseDate(i.dueDate || i.dateRaised);
+       const start = new Date(dateRange.start);
+       const end = new Date(dateRange.end);
+       issueDate.setHours(0,0,0,0);
+       start.setHours(0,0,0,0);
+       end.setHours(0,0,0,0);
 
-  // 2. Lọc Active Issues (Chưa đóng)
-  // Chuẩn hóa status: trim() và toLowerCase() để so sánh chính xác
-  const activeIssues = useMemo(() => {
-    return validIssues.filter(i => {
-        const s = (i.status || '').toLowerCase().trim();
-        return s !== 'closed' && s !== 'hoàn thành' && s !== 'đã đóng';
+       return issueDate >= start && issueDate <= end;
     });
-  }, [validIssues]);
+  }, [issues, dateRange]);
 
-  // 3. Đếm Critical (Chỉ tính trên Active Issues)
-  const criticalIssuesCount = useMemo(() => {
-    return activeIssues.filter(i => (i.severity || '').trim().toLowerCase() === 'critical').length;
-  }, [activeIssues]);
+  // Tính toán Issue trên tập dữ liệu ĐÃ LỌC
+  const activeIssues = useMemo(() => filteredIssues.filter(i => {
+      const s = (i.status || '').toLowerCase();
+      return s !== 'closed' && s !== 'hoàn thành';
+  }), [filteredIssues]);
+
+  const criticalIssuesCount = useMemo(() => activeIssues.filter(i => (i.severity || '').trim().toLowerCase() === 'critical').length, [activeIssues]);
 
   const statusConfigs = useMemo((): { id: string; label: string; color: string; icon: string }[] => [
     { id: 'To do', label: 'Todo', color: '#a39e93', icon: 'fa-list-ul' },
@@ -106,8 +118,6 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
     }));
   }, [tasksByStatus, totalFiltered, statusConfigs]);
 
-  // Hàm helper để chuẩn hóa mức độ (cho biểu đồ cột bên phải)
-  // Nếu severity rỗng -> Coi là Low
   const normalizeSeverity = (sev: string) => {
       const s = (sev || '').trim().toLowerCase();
       if (s === 'critical') return 'Critical';
@@ -131,11 +141,21 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
                <p className="code-font text-[9px] text-[#a39e93] uppercase tracking-widest mt-1">Phạm vi quan sát dữ liệu</p>
              </div>
           </div>
-          <div className="flex items-center bg-[#0d0b0a] p-1 rounded-xl border border-[#d4af37]/30 shadow-inner">
-            <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="bg-transparent text-xs p-2 outline-none text-[#f2ede4] code-font" />
-            <span className="px-2 text-[#d4af37]/30">➔</span>
-            <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="bg-transparent text-xs p-2 outline-none text-[#f2ede4] code-font" />
+          
+          {/* 👇 ĐÃ SỬA: Thay thế Input bằng Text hiển thị (Read-only) */}
+          <div className="flex items-center gap-3 bg-[#0d0b0a] px-4 py-2 rounded-xl border border-[#d4af37]/30 shadow-inner">
+            <span className="text-[#a39e93] text-[10px] code-font uppercase tracking-widest">Active Range:</span>
+            <span className="heritage-font text-[#d4af37] text-sm font-bold">
+               {formatDateDisplay(dateRange.start)}
+            </span>
+            <span className="text-[#a39e93] text-xs px-1">
+               <i className="fa-solid fa-arrow-right-long"></i>
+            </span>
+            <span className="heritage-font text-[#d4af37] text-sm font-bold">
+               {formatDateDisplay(dateRange.end)}
+            </span>
           </div>
+
         </div>
 
         {/* ISSUE OVERVIEW CARD */}
@@ -146,7 +166,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
               <i className={`fa-solid fa-triangle-exclamation text-xl ${criticalIssuesCount > 0 ? 'text-[#c41e3a] animate-pulse' : 'text-[#a39e93]'}`}></i>
               <span className="heritage-font text-xs font-bold text-[#f2ede4] tracking-widest">RỦI RO HỆ THỐNG</span>
             </div>
-            <span className="code-font text-lg font-black text-[#c41e3a]">{validIssues.length} ISSUES</span>
+            <span className="code-font text-lg font-black text-[#c41e3a]">{activeIssues.length} ISSUES</span>
           </div>
           <div className="mt-4 flex gap-2 relative z-10">
             <div className="bg-[#c41e3a]/10 px-3 py-1 rounded border border-[#c41e3a]/30 flex flex-col">
@@ -155,7 +175,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
             </div>
             <div className="bg-white/5 px-3 py-1 rounded border border-white/10 flex flex-col flex-1">
               <span className="text-[7px] text-[#a39e93] font-black uppercase">Active Owners</span>
-              <span className="text-sm font-bold text-[#f2ede4]">{[...new Set(activeIssues.map(i => i.owner).filter(o => o && o.trim() !== ''))].length}</span>
+              <span className="text-sm font-bold text-[#f2ede4]">{[...new Set(activeIssues.map(i => i.owner).filter(o => o && o.trim()))].length}</span>
             </div>
           </div>
         </div>
@@ -163,7 +183,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
 
       {/* SECTION B: CHARTS & ANALYSIS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* 1. Biểu đồ chung (Donut) - GIỮ NGUYÊN */}
+        {/* 1. Biểu đồ chung (Donut) */}
         <div className="lg:col-span-5 bg-[#1a1412] p-10 rounded-3xl border border-[#d4af37]/20 lacquer-gloss flex flex-col items-center shadow-2xl relative min-h-[500px]">
           <h3 className="heritage-font text-lg font-bold text-[#d4af37] tracking-[0.3em] mb-12 text-center uppercase border-b border-[#d4af37]/10 pb-4 w-full">Tổng quan Giao thức</h3>
           <div className="relative w-64 h-64 my-4">
@@ -196,7 +216,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
           </div>
         </div>
 
-        {/* 2. Biểu đồ Phân tích rủi ro Issue - ĐÃ SỬA LOGIC HIỂN THỊ */}
+        {/* 2. Biểu đồ Phân tích rủi ro Issue */}
         <div className="lg:col-span-7 bg-[#1a1412] p-10 rounded-3xl border border-[#d4af37]/20 lacquer-gloss shadow-2xl min-h-[500px] flex flex-col">
           <h3 className="heritage-font text-lg font-bold text-[#c41e3a] tracking-[0.2em] mb-10 uppercase border-b border-[#c41e3a]/10 pb-4">Chỉ số rủi ro vận hành</h3>
           
@@ -221,11 +241,10 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
 
           <div className="space-y-6 flex-1">
             {['Critical', 'High', 'Medium', 'Low'].map(sev => {
-               // Đếm dựa trên validIssues (đã lọc rác) thay vì issues gốc
-               // Và chuẩn hóa severity trước khi đếm
-               const count = validIssues.filter(i => normalizeSeverity(i.severity) === sev).length;
-               const percent = validIssues.length > 0 ? Math.round((count/validIssues.length)*100) : 0;
-               const colors: Record<string, string> = { Critical: '#c41e3a', High: '#d4af37', Medium: '#8c7333', Low: '#a39e93' };
+            // Lọc issue theo ngày trước khi đếm
+            const count = filteredIssues.filter(i => normalizeSeverity(i.severity) === sev).length;
+            const percent = filteredIssues.length > 0 ? Math.round((count/filteredIssues.length)*100) : 0;
+            const colors: Record<string, string> = { Critical: '#c41e3a', High: '#d4af37', Medium: '#8c7333', Low: '#a39e93' };
                return (
                  <div key={sev} className="space-y-2">
                    <div className="flex justify-between text-[9px] code-font font-bold uppercase tracking-widest text-[#a39e93]">

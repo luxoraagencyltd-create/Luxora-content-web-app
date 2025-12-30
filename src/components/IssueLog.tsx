@@ -3,13 +3,13 @@ import { Issue } from '../types';
 
 interface Props {
   issues: Issue[];
-  dateRange: { start: string, end: string }; // Nhận thêm dateRange
+  dateRange: { start: string, end: string };
 }
 
 const IssueLog: React.FC<Props> = ({ issues, dateRange }) => {
   
-  // Hàm xử lý ngày tháng (Copy lại để đảm bảo hoạt động độc lập)
-  const parseDate = (dStr: string) => {
+  // Hàm xử lý ngày để LỌC (Giữ nguyên logic cũ để tính toán)
+  const parseDateForFilter = (dStr: string) => {
     if (!dStr || dStr === 'N/A' || dStr.trim() === '') return null;
     const d = new Date(dStr);
     if (!isNaN(d.getTime())) return d;
@@ -22,24 +22,31 @@ const IssueLog: React.FC<Props> = ({ issues, dateRange }) => {
     } catch (e) { return null; }
   };
 
+  // 👇 HÀM MỚI: Format ngày để HIỂN THỊ (DD - MMM - YYYY)
+  const formatDisplayDate = (dStr: string) => {
+    if (!dStr || dStr === 'N/A') return '-';
+    const date = new Date(dStr);
+    
+    // Nếu date không hợp lệ (do format lạ), trả về nguyên gốc
+    if (isNaN(date.getTime())) return dStr;
+
+    const day = date.getDate().toString().padStart(2, '0');
+    const month = date.toLocaleString('en-US', { month: 'short' }); // Jan, Feb, Aug...
+    const year = date.getFullYear();
+
+    return `${day} - ${month} - ${year}`;
+  };
+
   const filteredIssues = useMemo(() => {
     return issues.filter(issue => {
-      // 1. Loại bỏ các dòng rác (không có ID hoặc Summary)
       if (!issue.id || !issue.summary) return false;
-
-      // 2. Lọc theo Ngày (Dùng Due Date - Cột H)
-      const dueDate = parseDate(issue.dueDate);
-      
-      // Nếu Issue không có Due Date thì vẫn cho hiện (để không bị sót issue quan trọng)
+      const dueDate = parseDateForFilter(issue.dueDate);
       if (dueDate) {
         dueDate.setHours(0, 0, 0, 0);
         const start = new Date(dateRange.start); start.setHours(0, 0, 0, 0);
         const end = new Date(dateRange.end); end.setHours(0, 0, 0, 0);
-
-        // Logic: Ngày Due Date phải nằm trong khoảng lọc
         if (dueDate < start || dueDate > end) return false;
       }
-
       return true;
     });
   }, [issues, dateRange]);
@@ -91,8 +98,8 @@ const IssueLog: React.FC<Props> = ({ issues, dateRange }) => {
                 <th className="p-4 uppercase tracking-widest">Nội dung vấn đề</th>
                 <th className="p-4 uppercase tracking-widest w-24 text-center">Mức độ</th>
                 <th className="p-4 uppercase tracking-widest w-32">Chủ trì</th>
-                <th className="p-4 uppercase tracking-widest w-24 text-center">Status</th>
-                <th className="p-4 uppercase tracking-widest w-24 text-center">Hạn Xử Lý</th>
+                <th className="p-4 uppercase tracking-widest w-32 text-center">Status</th>
+                <th className="p-4 uppercase tracking-widest w-32 text-center">Hạn Xử Lý</th>
               </tr>
             </thead>
             <tbody>
@@ -128,12 +135,14 @@ const IssueLog: React.FC<Props> = ({ issues, dateRange }) => {
                       {issue.owner}
                     </td>
                     <td className="p-4 text-center">
-                      <span className={`px-2 py-0.5 rounded text-[8px] font-black border uppercase ${getStatusStyle(issue.status)}`}>
+                      {/* 👇 SỬA LỖI IN PROGRESS: Thêm whitespace-nowrap để không bị xuống dòng */}
+                      <span className={`px-2 py-0.5 rounded text-[8px] font-black border uppercase whitespace-nowrap inline-block ${getStatusStyle(issue.status)}`}>
                         {issue.status}
                       </span>
                     </td>
-                    <td className="p-4 text-center code-font font-bold text-[#c41e3a]">
-                      {issue.dueDate}
+                    <td className="p-4 text-center code-font font-bold text-[#c41e3a] whitespace-nowrap">
+                      {/* 👇 SỬA LỖI NGÀY: Dùng hàm format mới */}
+                      {formatDisplayDate(issue.dueDate)}
                     </td>
                   </tr>
                 ))
