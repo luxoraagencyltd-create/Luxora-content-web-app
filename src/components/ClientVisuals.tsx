@@ -16,17 +16,33 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
     return `${d}/${m}/${y}`;
   };
 
+  // --- HÀM XỬ LÝ NGÀY MỚI (MẠNH MẼ HƠN) ---
   const parseDate = (dStr: string) => {
-    if (!dStr || dStr === 'N/A') return new Date(1970, 0, 1);
+    if (!dStr || dStr === 'N/A' || dStr.trim() === '') return null;
+    
+    // Trường hợp 1: ISO String (2025-12-25T...)
     const d = new Date(dStr);
     if (!isNaN(d.getTime())) return d;
+
+    // Trường hợp 2: dd/MMM/yyyy (26/Dec/2025) - Format từ Sheet của bạn
     try {
-      const [day, month, year] = dStr.split('/');
-      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-      const mIdx = months.findIndex(m => m.toLowerCase() === (month || '').toLowerCase());
-      if (mIdx === -1) return new Date(1970, 0, 1);
-      return new Date(parseInt(year), mIdx, parseInt(day));
-    } catch (e) { return new Date(1970, 0, 1); }
+      const parts = dStr.split(/[/-]/); // Tách bằng / hoặc -
+      if (parts.length === 3) {
+         const day = parseInt(parts[0]);
+         const monthStr = parts[1];
+         const year = parseInt(parts[2]);
+         
+         const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+         // Tìm index tháng (không phân biệt hoa thường)
+         const mIdx = months.findIndex(m => m === monthStr.toLowerCase());
+         
+         if (mIdx !== -1) {
+            return new Date(year, mIdx, day);
+         }
+      }
+    } catch (e) { console.error("Date parse error:", e); }
+    
+    return null; // Trả về null nếu không parse được
   };
 
   const today = useMemo(() => {
@@ -35,22 +51,26 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
     return d;
   }, []);
 
-  // --- LOGIC LỌC TASK THÔNG MINH ---
+  // --- LOGIC LỌC TASK (Dựa trên Plan End - Cột K) ---
   const filteredTasks = useMemo(() => {
-    // 1. Kiểm tra xem có dữ liệu ở tab 05 không?
-    const hasMasterData = tasks.some(t => t.tab === '05');
-    
-    // 2. Xác định tab nguồn: Nếu có 05 thì ưu tiên dùng 05, không thì dùng 06 (để Client vẫn xem được)
-    const targetTab = hasMasterData ? '05' : '06';
+    // Ưu tiên lấy dữ liệu từ TAB 05 (Task Master) để vẽ biểu đồ tổng quan
+    // Nếu không có data 05 thì mới lấy 06
+    const masterTasks = tasks.filter(t => t.tab === '05');
+    const sourceTasks = masterTasks.length > 0 ? masterTasks : tasks.filter(t => t.tab === '06');
 
-    return tasks.filter(t => {
-      // Chỉ lấy đúng tab nguồn để tránh trùng lặp số liệu (double counting)
-      if (t.tab !== targetTab || !t.id) return false;
+    return sourceTasks.filter(t => {
+      // Bỏ qua task không có ID
+      if (!t.id) return false;
 
       const taskDate = parseDate(t.planEnd);
+      
+      // Nếu không có ngày Plan End -> Mặc định CHO HIỆN (hoặc return false để ẩn)
+      if (!taskDate) return true; 
+
       const start = new Date(dateRange.start);
       const end = new Date(dateRange.end);
       
+      // Reset giờ để so sánh chính xác
       taskDate.setHours(0,0,0,0);
       start.setHours(0,0,0,0);
       end.setHours(0,0,0,0);
@@ -63,6 +83,8 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
     return issues.filter(i => {
        if (!i.id || !i.summary) return false;
        const issueDate = parseDate(i.dueDate || i.dateRaised);
+       if (!issueDate) return true;
+
        const start = new Date(dateRange.start);
        const end = new Date(dateRange.end);
        issueDate.setHours(0,0,0,0);
@@ -90,8 +112,13 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
   const getTaskStatus = React.useCallback((t: Task) => {
     if (t.status === 'Done') return 'Done';
     const dEnd = parseDate(t.planEnd);
-    dEnd.setHours(0,0,0,0);
-    if (dEnd < today && t.status !== 'Done') return 'Overdue';
+    
+    // Nếu có ngày Plan End và nhỏ hơn hôm nay -> Overdue
+    if (dEnd) {
+       dEnd.setHours(0,0,0,0);
+       if (dEnd < today && t.status !== 'Done') return 'Overdue';
+    }
+
     const s = (t.status || '').toLowerCase().trim();
     if (s === 'to do' || s === 'pending') return 'To do';
     if (s === 'doing' || s === 'in progress') return 'Doing';

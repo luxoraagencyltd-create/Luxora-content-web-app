@@ -1,34 +1,57 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { VitePWA } from 'vite-plugin-pwa';
 
-// https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate', // Tự động cập nhật khi có bản mới
+      includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg'],
+      manifest: {
+        name: 'Luxora Protocol',
+        short_name: 'Luxora',
+        description: 'Digital Temple Protocol 2.0 - Content Management System',
+        theme_color: '#0d0b0a', // Màu thanh status bar
+        background_color: '#0d0b0a', // Màu nền lúc khởi động
+        display: 'standalone', // Chạy như app native (mất thanh địa chỉ)
+        orientation: 'portrait',
+        scope: '/',
+        start_url: '/',
+        icons: [
+          {
+            src: '/assets/pwa-192x192.png', // Bạn cần tạo ảnh này
+            sizes: '192x192',
+            type: 'image/png'
+          },
+          {
+            src: '/assets/pwa-512x512.png', // Bạn cần tạo ảnh này
+            sizes: '512x512',
+            type: 'image/png'
+          },
+          {
+            src: '/assets/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable'
+          }
+        ]
+      }
+    })
+  ],
   server: {
     port: 3000,
+    host: true,
     proxy: {
-      // Khi code gọi /api/proxy, Vite sẽ chuyển hướng nó
-      // Nhưng vì proxy.js là file serverless, ta khó chạy nó trực tiếp bằng Vite thường.
-      // CÁCH TỐT NHẤT Ở LOCAL: Trỏ thẳng vào Google Script để test
-      
       '/api/proxy': {
         target: 'https://script.google.com',
         changeOrigin: true,
         secure: true,
         rewrite: (path) => {
-          // Đoạn này hơi tricky: 
-          // Code React của bạn gửi: /api/proxy?action=...&target=https://script.google.com/...
-          // Chúng ta cần lấy cái tham số `target` để fetch, nhưng Vite proxy tĩnh không làm được logic động này dễ dàng.
-          
-          // GIẢI PHÁP TẠM THỜI CHO LOCAL:
-          // Trả về chính cái URL script mặc định nếu chạy local
-          return '/macros/s/AKfycbw7HIgfEnoIkUOWFB-xU7dlyno84OaSWrdvJ3LXlX9KryXRJ7uobHzShg6MCoEzbIdh-Q/exec';
-        },
-        // Cấu hình để xử lý redirect của Google
-        configure: (proxy, _options) => {
-          proxy.on('proxyReq', (proxyReq, req, _res) => {
-            // Logic này để xử lý query params nếu cần
-          });
+           // Giữ nguyên logic proxy cũ của bạn
+           const googleScriptID = 'AKfycbxFTCYBBwC2s0Cu0KQkAjnJ15P9FmQx68orggfKhUtRMiA-VP2EaXWfruOCTfEmXdDUkQ'; 
+           const query = path.split('?')[1] || '';
+           return `/macros/s/${googleScriptID}/exec?${query}`;
         }
       }
     }

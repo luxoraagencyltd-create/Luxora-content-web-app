@@ -3,67 +3,135 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Luxora | Lacquer-Punk Protocol</title>
-    <!-- Vite sẽ tự xử lý Tailwind, không cần script CDN này nếu bạn đã cài npm install tailwindcss -->
+    <title>Luxora | System Protocol</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <link rel="icon" href="/assets/favicon.ico">
+    
+    <!-- IMPORT FONTS MỚI -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+
     <style>
-        @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;600;700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
-        
         :root {
-            --lacquer-black: #0d0b0a;
-            --lacquer-shadow: #050404;
-            --bamboo: #1a1412;
-            --rice-paper: #f2ede4;
-            --rice-paper-muted: #a39e93;
-            --gold-leaf: #d4af37;
-            --gold-light: #f4e1a6;
-            --gold-dark: #8c7333;
-            --cyber-blue: #00f2ff;
-            --lacquer-red: #c41e3a;
-            --lacquer-red-dark: #4d0b16;
+            /* --- COLOR PALETTE: CYBER-VOID --- */
+            --obsidian: #050505;       /* Đen lì */
+            --carbon: #0f1115;         /* Đen xám */
+            --void-purple: #1a0b2e;    /* Tím sâu */
+            
+            --electric-cyan: #00f3ff;  /* Xanh điện (Chủ đạo) */
+            --hologram-silver: #e0e0e0;/* Bạc */
+            --terminal-green: #0aff0a; /* Xanh ma trận (Success) */
+            --alert-red: #ff003c;      /* Đỏ cảnh báo */
+            
+            --glass-border: rgba(0, 243, 255, 0.15);
         }
 
         body {
             font-family: 'Inter', sans-serif;
-            background-color: var(--lacquer-black);
-            color: var(--rice-paper);
+            background-color: var(--obsidian);
+            color: var(--hologram-silver);
             margin: 0;
             padding: 0;
             overflow: hidden;
+            
+            /* CARBON FIBER TEXTURE BACKGROUND */
+            background-image: 
+                radial-gradient(circle at center, #1a1a1a 1px, transparent 1px),
+                linear-gradient(to bottom, rgba(0,0,0,0.8), rgba(0,0,0,0.2));
+            background-size: 20px 20px, 100% 100%;
         }
 
-        .heritage-font {
-            font-family: 'Cormorant Garamond', serif;
-            letter-spacing: 0.15em;
+        /* --- TYPOGRAPHY --- */
+        .headline-font {
+            font-family: 'Rajdhani', sans-serif;
             text-transform: uppercase;
+            letter-spacing: 0.1em;
         }
 
         .code-font {
             font-family: 'JetBrains Mono', monospace;
         }
 
-        .lacquer-gloss {
-            background: linear-gradient(135deg, rgba(163, 158, 147, 0.05) 0%, rgba(13, 11, 10, 0) 50%);
+        /* --- MATERIALS & EFFECTS --- */
+        
+        /* Frosted Glass - Thẻ kính mờ */
+        .glass-panel {
+            background: rgba(15, 17, 21, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 4px 30px rgba(0, 0, 0, 0.5);
         }
 
-        .neon-blue-glow {
-            text-shadow: 0 0 10px rgba(0, 242, 255, 0.3);
+        /* HUD Panel - Viền sắc cạnh, công nghệ */
+        .hud-panel {
+            background: rgba(5, 5, 5, 0.8);
+            border: 1px solid var(--glass-border);
+            position: relative;
+            box-shadow: 0 0 15px rgba(0, 243, 255, 0.05);
+        }
+        
+        /* Trang trí góc HUD (+) */
+        .hud-panel::before {
+            content: '+';
+            position: absolute;
+            top: -6px;
+            left: -3px;
+            color: var(--electric-cyan);
+            font-family: 'JetBrains Mono';
+            font-size: 10px;
         }
 
-        /* Custom scrollbar */
-        ::-webkit-scrollbar { width: 5px; height: 5px; }
-        ::-webkit-scrollbar-track { background: var(--lacquer-black); }
-        ::-webkit-scrollbar-thumb { background: var(--bamboo); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--gold-dark); }
+        /* Liquid Metal Text */
+        .text-liquid {
+            background: linear-gradient(to bottom, #ffffff, #a0a0a0);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));
+        }
+
+        /* Neon Glow Text */
+        .text-neon-cyan {
+            color: var(--electric-cyan);
+            text-shadow: 0 0 8px rgba(0, 243, 255, 0.6);
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 4px; height: 4px; }
+        ::-webkit-scrollbar-track { background: var(--obsidian); }
+        ::-webkit-scrollbar-thumb { background: var(--electric-cyan); border-radius: 0; }
+        ::-webkit-scrollbar-thumb:hover { background: #fff; }
 
         #root { height: 100vh; }
+        
+        /* Override Input Date Icon */
+        input[type="date"]::-webkit-calendar-picker-indicator {
+            filter: invert(1) sepia(1) saturate(5) hue-rotate(180deg); /* Chuyển sang màu cyan/trắng */
+            cursor: pointer;
+            opacity: 0.7;
+        }
+        
+        /* Animations */
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100%); }
+        }
+        .scanline::after {
+            content: " ";
+            display: block;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            z-index: 2;
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+        }
     </style>
 </head>
 <body>
-    <div id="root"></div>
-    <!-- Vite tự động xử lý file này -->
+    <div id="root" class="scanline"></div>
     <script type="module" src="/src/index.tsx"></script>
 </body>
 </html>

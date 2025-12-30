@@ -28,7 +28,7 @@ const Sidebar: React.FC<Props> = ({ onSettingsClick: _onSettingsClick, currentPr
         {!isAdmin && (
           <>
             <div onClick={() => setActiveView('dashboard')} className="relative">
-              <NavItem icon="fa-house-chimney-window" label="tổng hợp task" active={activeView === 'dashboard'} />
+              <NavItem icon="fa-house-chimney-window" label="Production Report" active={activeView === 'dashboard'} />
               {unreadMessages > 0 && activeView !== 'dashboard' && (
                 <span className="absolute top-2 right-2 w-5 h-5 bg-[#c41e3a] text-white text-[9px] font-black rounded-full flex items-center justify-center border-2 border-[#0d0b0a] shadow-lg animate-bounce">
                   {unreadMessages}

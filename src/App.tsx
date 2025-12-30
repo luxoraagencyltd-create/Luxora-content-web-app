@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Task, ReviewMessage, LogEntry, Project, User, Issue } from './types';
 import { db } from './lib/firebase';
-// 👇 1. THÊM CÁC HÀM FIREBASE CẦN THIẾT
 import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, orderBy, limit, Timestamp } from 'firebase/firestore';
 import Sidebar from './components/Sidebar';
 import SheetSimulator from './components/SheetSimulator';
@@ -12,14 +11,26 @@ import AdminPanel from './components/AdminPanel';
 import ProjectSelector from './components/ProjectSelector';
 import ClientVisuals from './components/ClientVisuals';
 import IssueLog from './components/IssueLog';
+import PWAPrompt from './components/PWAPrompt';
+import MobileNavbar from './components/MobileNavbar'; // 👇 IMPORT MỚI
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFTCYBBwC2s0Cu0KQkAjnJ15P9FmQx68orggfKhUtRMiA-VP2EaXWfruOCTfEmXdDUkQ/exec";
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
-const ScoreCard = ({ label, count, color, active, onClick }: { label: string, count: number, color: string, active: boolean, onClick: () => void }) => (
-  <button onClick={onClick} className={`p-4 rounded-xl border flex flex-col items-center gap-1 transition-all group ${active ? 'bg-white text-[#0d0b0a] border-white scale-105 shadow-[0_0_20px_rgba(255,255,255,0.2)]' : 'bg-[#1a1412] border-[#d4af37]/10'}`}>
-    <span className="code-font text-[8px] font-black tracking-[0.2em] uppercase" style={{ color: active ? '#0d0b0a' : color }}>{label}</span>
-    <span className="heritage-font text-2xl font-bold tracking-widest">{count}</span>
+const HUDCard = ({ label, count, color, active, onClick }: { label: string, count: number, color: string, active: boolean, onClick: () => void }) => (
+  <button 
+    onClick={onClick} 
+    className={`p-4 relative transition-all group border border-l-4 overflow-hidden ${active ? 'bg-[#00f3ff]/10 border-[#00f3ff]' : 'bg-[#0f1115] border-[#ffffff]/10 hover:border-[#00f3ff]/50'}`}
+    style={{ borderLeftColor: color }}
+  >
+    <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-[#ffffff]/20"></div>
+    <div className="flex flex-col items-start">
+      <span className="code-font text-[9px] uppercase tracking-[0.2em] mb-1" style={{ color: active ? '#fff' : '#888' }}>{label}</span>
+      <span className="headline-font text-3xl font-bold tracking-wider text-white" style={{ textShadow: active ? `0 0 10px ${color}` : 'none' }}>
+        {count < 10 ? `0${count}` : count}
+      </span>
+    </div>
+    {active && <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#00f3ff]/5 to-transparent h-full w-full animate-pulse pointer-events-none"></div>}
   </button>
 );
 
@@ -27,28 +38,23 @@ const App: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState<string>('dashboard');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
-  
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState({ start: '2025-01-01', end: '2026-12-31' });
   const [activeTab, setActiveTab] = useState<'05' | '06'>('05'); 
-  
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  
   const [projects, setProjects] = useState<Project[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [issues, setIssues] = useState<Issue[]>([]);
   const [messages, setMessages] = useState<ReviewMessage[]>([]);
   const [appConfig, setAppConfig] = useState<{googleSheetUrl: string; webAppUrl: string}>({ googleSheetUrl: '', webAppUrl: '' });
-
   const [chatDraft, setChatDraft] = useState<string>('');
   const [pendingFeedbackTask, setPendingFeedbackTask] = useState<string | null>(null); 
   const [feedbackAccumulator, setFeedbackAccumulator] = useState<string[]>([]); 
-
+  
   const isFetchingRef = useRef(false);
   const prevTasksRef = useRef<Task[]>([]);
-
   const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
 
   useEffect(() => {
@@ -61,51 +67,26 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  // --- 2. LẮNG NGHE TIN NHẮN TỪ FIREBASE ---
   useEffect(() => {
-    if (!selectedProjectId) {
-      setMessages([]);
-      return;
-    }
-
-    // Tạo query: Lấy tin nhắn của Project hiện tại, sắp xếp theo thời gian
-    const q = query(
-      collection(db, 'messages'),
-      where('projectId', '==', selectedProjectId),
-      orderBy('timestamp', 'asc'),
-      limit(100) // Giới hạn 100 tin nhắn gần nhất để đỡ nặng
-    );
-
+    if (!selectedProjectId) { setMessages([]); return; }
+    const q = query(collection(db, 'messages'), where('projectId', '==', selectedProjectId), orderBy('timestamp', 'asc'), limit(100));
     const unsubMessages = onSnapshot(q, (snapshot) => {
       const msgs = snapshot.docs.map(doc => {
         const data = doc.data();
-        return {
-          ...data,
-          id: doc.id,
-          // Chuyển đổi Firestore Timestamp về JS Date
-          timestamp: data.timestamp instanceof Timestamp ? data.timestamp.toDate() : new Date(data.timestamp)
-        } as ReviewMessage;
+        return { ...data, id: doc.id, timestamp: data.timestamp instanceof Timestamp ? data.timestamp.toDate() : new Date(data.timestamp) } as ReviewMessage;
       });
       setMessages(msgs);
     });
-
     return () => unsubMessages();
   }, [selectedProjectId]);
 
   useEffect(() => {
     if (!selectedProjectId) return;
-    const interval = setInterval(() => {
-        syncWithSheet(true); 
-    }, 15000); 
+    const interval = setInterval(() => { syncWithSheet(true); }, 15000); 
     return () => clearInterval(interval);
   }, [selectedProjectId]); 
 
-  const playSound = () => {
-    try {
-        const audio = new Audio(NOTIFICATION_SOUND);
-        audio.play().catch(e => console.log("Audio blocked:", e));
-    } catch (e) {}
-  };
+  const playSound = () => { try { new Audio(NOTIFICATION_SOUND).play().catch(() => {}); } catch (e) {} };
 
   const parseDate = (dStr: string) => {
     if (!dStr || dStr === 'N/A' || dStr.trim() === '') return null;
@@ -125,22 +106,19 @@ const App: React.FC = () => {
     setLogs(prev => [newLog, ...prev].slice(0, 50));
   }, [selectedProjectId]);
 
-  // --- HÀM GỬI THÔNG BÁO LÊN FIREBASE ---
   const createSystemNotification = async (taskName: string, taskId: string) => {
     if (!selectedProjectId) return;
     try {
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
         senderId: 'SYSTEM',
-        senderName: 'HỆ THỐNG',
+        senderName: 'CORE AI',
         senderRole: 'ADMIN',
-        text: `[${taskId}] [${taskName}]\ncần review`,
+        text: `STATUS UPDATE: [${taskId}] ${taskName} >> REVIEW_MODE_ACTIVATED`,
         timestamp: new Date(),
         type: 'NOTIFICATION'
       });
-    } catch (e) {
-      console.error("Error sending notification:", e);
-    }
+    } catch (e) {}
   };
 
   const syncWithSheet = useCallback(async (isSilent = false) => {
@@ -149,7 +127,7 @@ const App: React.FC = () => {
     isFetchingRef.current = true;
     
     if (!isSilent) setIsLoading(true);
-    if (!isSilent) addLog("Kích hoạt giao thức đồng bộ thực địa...", "INFO");
+    if (!isSilent) addLog("INITIATING DATA SYNC PROTOCOL...", "INFO");
     
     try {
       const scriptUrl = currentProject?.webAppUrl || appConfig.webAppUrl || APPS_SCRIPT_URL;
@@ -161,12 +139,11 @@ const App: React.FC = () => {
       const text = await response.text();
       let result: any;
       try { result = JSON.parse(text); } catch (err) {
-        if (!isSilent) addLog('Lỗi dữ liệu JSON từ Server.', 'WARNING');
+        if (!isSilent) addLog('DATA CORRUPTION DETECTED (JSON ERROR)', 'WARNING');
         return;
       }
       
       let fetchedTasks: Task[] = [];
-
       if (result.tasks05) {
         const t05 = result.tasks05.map((row: any) => ({
           id: String(row['id'] || row['ID task'] || ''),
@@ -206,7 +183,7 @@ const App: React.FC = () => {
       }
       
       if (Array.isArray(result.issues)) {
-         setIssues(result.issues.map((row: Record<string, unknown>) => {
+        setIssues(result.issues.map((row: Record<string, unknown>) => {
             const findValue = (keywords: string[]) => {
               const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase())));
               return key ? String(row[key]) : '';
@@ -235,7 +212,6 @@ const App: React.FC = () => {
          }));
       }
 
-      // Logic Trigger (Bây giờ sẽ gọi hàm lưu lên Firebase)
       if (prevTasksRef.current.length > 0) {
         const triggeredIds = new Set();
         fetchedTasks.forEach(newTask => {
@@ -244,9 +220,8 @@ const App: React.FC = () => {
                 if (!triggeredIds.has(newTask.id)) {
                     triggeredIds.add(newTask.id);
                     playSound();
-                    // 👇 GỌI HÀM LƯU LÊN FIREBASE
                     createSystemNotification(newTask.name, newTask.id);
-                    addLog(`🔔 New Trigger: ${newTask.id} cần review!`, 'SUCCESS');
+                    addLog(`ALERT: MODULE ${newTask.id} READY FOR REVIEW`, 'SUCCESS');
                 }
             }
         });
@@ -255,10 +230,9 @@ const App: React.FC = () => {
       setTasks(fetchedTasks);
       prevTasksRef.current = fetchedTasks;
 
-      if (!isSilent) addLog("Dữ liệu thực địa đã được nạp thành công.", "SUCCESS");
+      if (!isSilent) addLog("DATA SYNC COMPLETE. SYSTEM UPDATED.", "SUCCESS");
     } catch (error) {
-      console.error(error);
-      if (!isSilent) addLog("Giao thức đồng bộ thất bại.", "WARNING");
+      if (!isSilent) addLog("CONNECTION LOST. RETRYING...", "WARNING");
     } finally {
       isFetchingRef.current = false;
       setIsLoading(false);
@@ -272,7 +246,7 @@ const App: React.FC = () => {
     return () => { unsubUsers(); unsubProjects(); unsubConfig(); };
   }, []);
 
-  useEffect(() => { if (selectedProjectId) syncWithSheet(); }, [selectedProjectId]); 
+  useEffect(() => { if (selectedProjectId) syncWithSheet(); }, [selectedProjectId]);
 
   const handleUpdateProject = async (p: Project) => await setDoc(doc(db, 'projects', p.id), p);
   const handleCreateProject = async (p: Partial<Project>) => await setDoc(doc(db, 'projects', p.id || `P-${Date.now()}`), { ...p, id: p.id || `P-${Date.now()}`, clientIds: [], staffIds: [] } as Project);
@@ -284,38 +258,31 @@ const App: React.FC = () => {
   const handleAction = async (action: string, taskId: string) => {
     if (action === 'approve') {
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, status: 'Done' } : t));
-      addLog(`Phê duyệt Node ${taskId}`, 'INFO');
+      addLog(`AUTHORIZING MODULE ${taskId}...`, 'INFO');
       try {
         const scriptUrl = currentProject?.webAppUrl || appConfig.webAppUrl || APPS_SCRIPT_URL;
         let finalUrl = (import.meta.env.DEV && !window.location.host.includes('vercel')) 
             ? `/api/proxy?target=${encodeURIComponent(scriptUrl)}`
             : `/api/proxy?target=${encodeURIComponent(scriptUrl)}`;
-
-        await fetch(finalUrl, {
-          method: 'POST',
-          body: JSON.stringify({ action: 'approve', taskId: taskId })
-        });
-        addLog(`Đã lưu trạng thái DONE cho Node ${taskId}`, 'SUCCESS');
-      } catch (error) {
-        addLog(`Lỗi đồng bộ phê duyệt Node ${taskId}`, 'WARNING');
-      }
+        
+        await fetch(finalUrl, { method: 'POST', body: JSON.stringify({ action: 'approve', taskId: taskId }) });
+        addLog(`MODULE ${taskId} STATUS: DEPLOYED (DONE)`, 'SUCCESS');
+      } catch (error) { addLog(`UPLOAD FAILED FOR ${taskId}`, 'WARNING'); }
     } 
     else if (action === 'request_edit') {
       const task = tasks.find(t => t.id === taskId);
       if (task) {
-        const draft = `[${task.id}] [${task.name}]\nCần sửa với nội dung: `;
+        const draft = `[${task.id}] [${task.name}]\nREQUESTING REVISION: `;
         setChatDraft(draft);
         setPendingFeedbackTask(taskId);
         setFeedbackAccumulator([]); 
-        addLog(`Bắt đầu phiên Feedback cho Node ${taskId}...`, 'INFO');
+        addLog(`FEEDBACK PROTOCOL INITIATED FOR ${taskId}`, 'INFO');
       }
     }
     else if (action === 'confirm_feedback') {
       if (!pendingFeedbackTask || feedbackAccumulator.length === 0) return;
-
       const combinedText = feedbackAccumulator.join('\n\n---\n\n'); 
       setTasks(prev => prev.map(t => t.id === pendingFeedbackTask ? { ...t, status: 'Need Edit' } : t));
-
       try {
         const scriptUrl = currentProject?.webAppUrl || appConfig.webAppUrl || APPS_SCRIPT_URL;
         let finalUrl = (import.meta.env.DEV && !window.location.host.includes('vercel')) 
@@ -324,28 +291,17 @@ const App: React.FC = () => {
 
         await fetch(finalUrl, {
           method: 'POST',
-          body: JSON.stringify({
-            action: 'submit_feedback',
-            taskId: pendingFeedbackTask,
-            feedbackContent: combinedText
-          })
+          body: JSON.stringify({ action: 'submit_feedback', taskId: pendingFeedbackTask, feedbackContent: combinedText })
         });
-        addLog(`Đã gửi ${feedbackAccumulator.length} ghi chú sửa đổi cho Node ${pendingFeedbackTask}`, 'SUCCESS');
-      } catch (e) {
-        console.error(e);
-        addLog('Lỗi kết nối khi gửi feedback', 'WARNING');
-      }
-
+        addLog(`FEEDBACK UPLOADED. MODULE ${pendingFeedbackTask} FLAGGED FOR REVISION.`, 'SUCCESS');
+      } catch (e) { addLog('TRANSMISSION ERROR', 'WARNING'); }
       setPendingFeedbackTask(null);
       setFeedbackAccumulator([]);
     }
   };
 
-  // --- 3. SỬA HÀM GỬI TIN NHẮN (ĐẨY LÊN FIREBASE) ---
   const handleSendMessage = async (text: string, replyToId?: string, taggedIds?: string[]) => {
     if (!selectedProjectId || !currentUser) return;
-    
-    // Gửi tin nhắn lên Firebase
     try {
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
@@ -358,18 +314,9 @@ const App: React.FC = () => {
         replyToId: replyToId || null,
         taggedUserIds: taggedIds || []
       });
-      
-      // Clear input (Logic clear nằm ở ReviewPortal, ở đây chỉ xử lý logic gửi)
-      // Local state messages sẽ tự update nhờ onSnapshot ở trên
       setChatDraft(''); 
-
-      if (pendingFeedbackTask) {
-         setFeedbackAccumulator(prev => [...prev, text]);
-      }
-    } catch (e) {
-      console.error("Error sending message:", e);
-      addLog("Lỗi gửi tin nhắn", "WARNING");
-    }
+      if (pendingFeedbackTask) { setFeedbackAccumulator(prev => [...prev, text]); }
+    } catch (e) { addLog("MESSAGE FAILED TO SEND", "WARNING"); }
   };
 
   const currentTabTasks = useMemo(() => {
@@ -422,74 +369,118 @@ const App: React.FC = () => {
   }
 
   return (
-    <div className="flex h-screen w-full bg-[#0d0b0a] overflow-hidden text-[#f2ede4] relative">
+    <div className="flex h-screen w-full bg-[#050505] overflow-hidden text-[#e0e0e0] relative font-sans">
       {isLoading && (
-        <div className="absolute inset-0 z-[100] bg-[#0d0b0a]/60 backdrop-blur-sm flex items-center justify-center">
+        <div className="absolute inset-0 z-[100] bg-[#050505]/80 backdrop-blur-md flex items-center justify-center">
           <div className="flex flex-col items-center gap-6">
-            <div className="w-16 h-16 border-4 border-[#d4af37]/20 border-t-[#d4af37] rounded-full animate-spin"></div>
-            <p className="heritage-font text-[#d4af37] text-xs font-black tracking-[0.4em]">SYNCING PROTOCOL...</p>
+            <div className="w-20 h-20 border-t-2 border-[#00f3ff] rounded-full animate-spin shadow-[0_0_20px_#00f3ff]"></div>
+            <p className="headline-font text-[#00f3ff] text-xl tracking-[0.3em] animate-pulse">SYSTEM SYNCING...</p>
           </div>
         </div>
       )}
 
-      <Sidebar currentProject={currentProject} activeView={activeView} setActiveView={setActiveView} userRole={currentUser.role} onLogout={() => { setCurrentUser(null); setSelectedProjectId(null); }} onSwitchProject={() => setSelectedProjectId(null)} />
+      {/* --- SIDEBAR CHO DESKTOP --- */}
+      <div className="hidden md:flex h-full flex-shrink-0 z-40">
+          <Sidebar 
+             currentProject={currentProject} 
+             activeView={activeView} 
+             setActiveView={setActiveView} 
+             userRole={currentUser.role} 
+             onLogout={() => { setCurrentUser(null); setSelectedProjectId(null); }} 
+             onSwitchProject={() => setSelectedProjectId(null)} 
+          />
+      </div>
       
-      <div className="flex-1 flex flex-col min-w-0 border-l border-[#1a1412]">
-        <header className="h-16 border-b border-[#1a1412] bg-[#0d0b0a]/80 backdrop-blur-md flex items-center justify-between px-6 z-20 shadow-lg">
+      {/* --- MAIN CONTENT WRAPPER (Thêm padding bottom cho mobile) --- */}
+      <div className="flex-1 flex flex-col min-w-0 md:border-l border-[#00f3ff]/20 bg-[url('/assets/grid-bg.png')] pb-20 md:pb-0">
+        
+        {/* HEADER RESPONSIVE */}
+        <header className="h-16 md:h-20 border-b border-[#00f3ff]/20 bg-[#050505]/90 backdrop-blur-md flex items-center justify-between px-4 md:px-8 z-20 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[#c41e3a] flex items-center justify-center border border-white/10">
-              <i className="fa-solid fa-microchip"></i>
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-sm bg-[#00f3ff]/10 flex items-center justify-center border border-[#00f3ff] shadow-[0_0_15px_rgba(0,243,255,0.3)]">
+              <i className="fa-solid fa-microchip text-[#00f3ff] text-lg md:text-2xl"></i>
             </div>
             <div>
-              <h1 className="heritage-font text-lg font-bold text-[#d4af37] tracking-wider uppercase">Luxora Protocol</h1>
-              <p className="code-font text-[7px] text-[#a39e93] uppercase tracking-[0.3em]">{currentUser.fullName} | {activeView.toUpperCase()}</p>
+              <h1 className="headline-font text-lg md:text-2xl font-bold text-white tracking-widest text-shadow-neon">LUXORA</h1>
+              <p className="code-font text-[8px] md:text-[10px] text-[#00f3ff] uppercase tracking-[0.2em] truncate max-w-[120px] md:max-w-none">
+                {currentUser.fullName} // {activeView.toUpperCase()}
+              </p>
             </div>
           </div>
           
-          <div className="flex items-center bg-[#1a1412] border border-[#d4af37]/20 rounded-lg p-1 gap-2">
-             <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="bg-transparent text-[10px] text-[#f2ede4] p-1 outline-none code-font cursor-pointer dark:[color-scheme:dark]"/>
-             <span className="text-[#d4af37]">-</span>
-             <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="bg-transparent text-[10px] text-[#f2ede4] p-1 outline-none code-font cursor-pointer dark:[color-scheme:dark]"/>
+          <div className="hidden md:flex items-center bg-[#0f1115] border border-[#00f3ff]/20 p-1 gap-2 hud-panel">
+             <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="bg-transparent text-xs text-[#00f3ff] p-2 outline-none code-font cursor-pointer uppercase dark:[color-scheme:dark]"/>
+             <span className="text-[#00f3ff]">-</span>
+             <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="bg-transparent text-xs text-[#00f3ff] p-2 outline-none code-font cursor-pointer uppercase dark:[color-scheme:dark]"/>
           </div>
 
-          <button onClick={() => syncWithSheet(false)} className="text-[#d4af37] border border-[#d4af37]/30 px-4 py-2 rounded-lg text-xs font-bold hover:bg-[#d4af37]/5 transition-all flex items-center gap-2">
-            <i className="fa-solid fa-sync"></i> SYNC SHEET
+          <button onClick={() => syncWithSheet(false)} className="group relative px-3 md:px-6 py-2 bg-transparent overflow-hidden rounded-sm border border-[#00f3ff] text-[#00f3ff] hover:text-black transition-colors">
+            <div className="absolute inset-0 w-0 bg-[#00f3ff] transition-all duration-[250ms] ease-out group-hover:w-full"></div>
+            <span className="relative flex items-center gap-2 headline-font font-bold text-xs md:text-sm tracking-widest">
+                <i className="fa-solid fa-rotate"></i> <span className="hidden md:inline">SYNC DATA</span>
+            </span>
           </button>
         </header>
 
-        <main className="flex-1 overflow-auto p-6 scrollbar-thin">
+        {/* DASHBOARD CONTENT */}
+        {/* MAIN CONTENT */}
+        <main className="flex-1 overflow-auto p-4 md:p-8 scrollbar-thin">
           {activeView === 'dashboard' ? (
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full">
-              <div className="lg:col-span-8 space-y-6 flex flex-col h-full overflow-hidden">
-                <div className="grid grid-cols-4 gap-4">
-                  <ScoreCard label="DONE" count={stats.done} color="#00f2ff" active={statusFilter === 'Done'} onClick={() => setStatusFilter(statusFilter === 'Done' ? null : 'Done')} />
-                  <ScoreCard label="REVIEW" count={stats.review} color="#d4af37" active={statusFilter === 'Review'} onClick={() => setStatusFilter(statusFilter === 'Review' ? null : 'Review')} />
-                  <ScoreCard label="DOING" count={stats.doing} color="#f2ede4" active={statusFilter === 'Doing'} onClick={() => setStatusFilter(statusFilter === 'Doing' ? null : 'Doing')} />
-                  <ScoreCard label="TO DO" count={stats.todo} color="#a39e93" active={statusFilter === 'To do'} onClick={() => setStatusFilter(statusFilter === 'To do' ? null : 'To do')} />
+            // 👇 SỬA 1: h-full -> h-auto lg:h-full (Mobile tự dãn, Desktop full màn hình)
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 h-auto lg:h-full">
+              
+              {/* LEFT COLUMN */}
+              {/* 👇 SỬA 2: Bỏ overflow-hidden trên mobile, chỉ dùng trên Desktop (lg:...) */}
+              <div className="lg:col-span-8 space-y-4 flex flex-col h-auto lg:h-full lg:overflow-hidden">
+                
+                {/* HUD Cards */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4 shrink-0">
+                  <HUDCard label="COMPLETED" count={stats.done} color="#00f3ff" active={statusFilter === 'Done'} onClick={() => setStatusFilter(statusFilter === 'Done' ? null : 'Done')} />
+                  <HUDCard label="PENDING REVIEW" count={stats.review} color="#e0e0e0" active={statusFilter === 'Review'} onClick={() => setStatusFilter(statusFilter === 'Review' ? null : 'Review')} />
+                  <HUDCard label="IN PROGRESS" count={stats.doing} color="#888888" active={statusFilter === 'Doing'} onClick={() => setStatusFilter(statusFilter === 'Doing' ? null : 'Doing')} />
+                  <HUDCard label="QUEUED" count={stats.todo} color="#333333" active={statusFilter === 'To do'} onClick={() => setStatusFilter(statusFilter === 'To do' ? null : 'To do')} />
                 </div>
-                <section className="flex-1 bg-[#1a1412] rounded-2xl border border-[#d4af37]/20 p-1 overflow-hidden flex flex-col shadow-2xl">
-                    <div className="p-3 bg-[#0d0b0a] border-b border-[#d4af37]/20 flex gap-4 justify-between items-center">
-                      <div className="flex gap-4">
+                
+                {/* Main Table Section */}
+                {/* 👇 SỬA 3: Thêm min-h-[400px] để đảm bảo bảng luôn hiện trên điện thoại */}
+                <section className="flex-1 glass-panel p-1 flex flex-col relative rounded-sm min-h-[400px] lg:min-h-0 overflow-hidden">
+                    <div className="absolute top-0 left-0 w-4 h-4 border-t border-l border-[#00f3ff]"></div>
+                    <div className="absolute bottom-0 right-0 w-4 h-4 border-b border-r border-[#00f3ff]"></div>
+
+                    <div className="p-3 bg-[#0f1115]/50 border-b border-[#ffffff]/10 flex flex-col md:flex-row gap-2 justify-between items-start md:items-center shrink-0">
+                      <div className="flex gap-4 w-full md:w-auto overflow-x-auto">
                         {currentUser?.role !== 'CLIENT' ? (
                           <>
-                            <button onClick={() => { setActiveTab('05'); setStatusFilter(null); }} className={`px-4 py-1 text-[10px] font-bold heritage-font transition-all ${activeTab === '05' ? 'text-[#d4af37] border-b-2 border-[#d4af37]' : 'text-[#a39e93]'}`}>05. TASK MASTER</button>
-                            <button onClick={() => { setActiveTab('06'); setStatusFilter(null); }} className={`px-4 py-1 text-[10px] font-bold heritage-font transition-all ${activeTab === '06' ? 'text-[#d4af37] border-b-2 border-[#d4af37]' : 'text-[#a39e93]'}`}>06. PRODUCTION</button>
+                            <button onClick={() => { setActiveTab('05'); setStatusFilter(null); }} className={`px-4 md:px-6 py-2 text-[10px] md:text-xs font-bold headline-font transition-all clip-path-slant whitespace-nowrap ${activeTab === '05' ? 'bg-[#00f3ff] text-black' : 'bg-transparent text-[#888] border border-[#888] hover:border-[#00f3ff] hover:text-[#00f3ff]'}`}>TASK MASTER</button>
+                            <button onClick={() => { setActiveTab('06'); setStatusFilter(null); }} className={`px-4 md:px-6 py-2 text-[10px] md:text-xs font-bold headline-font transition-all clip-path-slant whitespace-nowrap ${activeTab === '06' ? 'bg-[#00f3ff] text-black' : 'bg-transparent text-[#888] border border-[#888] hover:border-[#00f3ff] hover:text-[#00f3ff]'}`}>PRODUCTION</button>
                           </>
                         ) : (
-                          <span className="heritage-font text-[#d4af37] text-xs font-bold tracking-widest uppercase">
-                             DANH SÁCH BÀI ĐĂNG (PRODUCTION)
+                          <span className="headline-font text-[#00f3ff] text-xs md:text-sm font-bold tracking-[0.2em] uppercase flex items-center gap-2">
+                             <i className="fa-solid fa-layer-group"></i> PRODUCTION MODULE
                           </span>
                         )}
                       </div>
-                      <div className="text-[9px] text-[#a39e93] code-font">
-                        Showing: <span className="text-[#f2ede4] font-bold">{currentTabTasks.length}</span> nodes
+                      <div className="text-[10px] text-[#888] code-font">
+                        VISIBLE NODES: <span className="text-[#00f3ff] font-bold">{currentTabTasks.length}</span>
                       </div>
                     </div>
-                   <SheetSimulator tasks={currentTabTasks} onTaskSubmit={handleAction} currentTab={activeTab} />
+                   
+                   {/* Container cho bảng cuộn */}
+                   <div className="flex-1 overflow-auto">
+                      <SheetSimulator tasks={currentTabTasks} onTaskSubmit={handleAction} currentTab={activeTab} />
+                   </div>
                 </section>
-                <section className="h-40 bg-[#1a1412] rounded-2xl border border-[#d4af37]/10 p-4 flex flex-col"><LogPanel logs={logs} /></section>
+                
+                {/* System Logs */}
+                <section className="hidden md:flex h-32 hud-panel p-3 flex-col rounded-sm overflow-hidden shrink-0">
+                    <h4 className="code-font text-[#00f3ff] text-[10px] mb-1 uppercase tracking-widest border-b border-[#00f3ff]/20 pb-1">System Logs</h4>
+                    <LogPanel logs={logs} />
+                </section>
               </div>
-              <div className="lg:col-span-4 h-full">
+              
+              {/* RIGHT COLUMN (CHAT) */}
+              {/* 👇 SỬA 4: Đặt chiều cao cố định (500px) trên mobile, full trên desktop */}
+              <div className="lg:col-span-4 h-[500px] lg:h-full">
                   <ReviewPortal 
                     messages={messages} 
                     users={users} 
@@ -518,6 +509,19 @@ const App: React.FC = () => {
           )}
         </main>
       </div>
+      
+      {/* --- MENU ĐÁY CHO MOBILE --- */}
+      <MobileNavbar 
+         activeView={activeView} 
+         setActiveView={setActiveView} 
+         userRole={currentUser.role} 
+         currentUser={currentUser}
+         onLogout={() => { setCurrentUser(null); setSelectedProjectId(null); }}
+         onSwitchProject={() => setSelectedProjectId(null)}
+         project={currentProject}
+      />
+
+      <PWAPrompt />
     </div>
   );
 };
