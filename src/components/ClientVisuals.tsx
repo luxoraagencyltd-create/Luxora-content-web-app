@@ -1,4 +1,3 @@
-
 import React, { useMemo } from 'react';
 import { Task, Issue } from '../types';
 
@@ -10,12 +9,20 @@ interface Props {
 }
 
 const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange }) => {
+  
   const parseDate = (dStr: string) => {
     if (!dStr || dStr === 'N/A') return new Date();
-    const [d, m, y] = dStr.split('/');
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const mIdx = months.indexOf(m);
-    return new Date(parseInt(y), mIdx, parseInt(d));
+    const d = new Date(dStr);
+    if (!isNaN(d.getTime())) return d;
+    try {
+      const [day, month, year] = dStr.split('/');
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const mIdx = months.findIndex(m => m.toLowerCase() === (month || '').toLowerCase());
+      if (mIdx === -1) return new Date();
+      return new Date(parseInt(year), mIdx, parseInt(day));
+    } catch (e) {
+      return new Date();
+    }
   };
 
   const today = useMemo(() => {
@@ -24,17 +31,41 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
     return d;
   }, []);
 
+  // LỌC TASK: Chỉ lấy tab 05 và có ID
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
+      if (t.tab !== '05' || !t.id) return false;
       const taskDate = parseDate(t.planEnd);
       const start = new Date(dateRange.start);
       const end = new Date(dateRange.end);
+      taskDate.setHours(0,0,0,0);
+      start.setHours(0,0,0,0);
+      end.setHours(0,0,0,0);
       return taskDate >= start && taskDate <= end;
     });
   }, [tasks, dateRange]);
 
-  const activeIssues = useMemo(() => issues.filter(i => i.status !== 'Closed'), [issues]);
-  const criticalIssuesCount = useMemo(() => activeIssues.filter(i => i.severity === 'Critical').length, [activeIssues]);
+  // --- LOGIC MỚI CHO ISSUE ---
+  
+  // 1. Lọc danh sách Issue hợp lệ (phải có Tên vấn đề và ID)
+  // Loại bỏ các dòng ID rỗng hoặc chỉ có ID mà không có nội dung
+  const validIssues = useMemo(() => {
+    return issues.filter(i => i.id && i.summary && i.summary.trim() !== '');
+  }, [issues]);
+
+  // 2. Lọc Active Issues (Chưa đóng)
+  // Chuẩn hóa status: trim() và toLowerCase() để so sánh chính xác
+  const activeIssues = useMemo(() => {
+    return validIssues.filter(i => {
+        const s = (i.status || '').toLowerCase().trim();
+        return s !== 'closed' && s !== 'hoàn thành' && s !== 'đã đóng';
+    });
+  }, [validIssues]);
+
+  // 3. Đếm Critical (Chỉ tính trên Active Issues)
+  const criticalIssuesCount = useMemo(() => {
+    return activeIssues.filter(i => (i.severity || '').trim().toLowerCase() === 'critical').length;
+  }, [activeIssues]);
 
   const statusConfigs = useMemo((): { id: string; label: string; color: string; icon: string }[] => [
     { id: 'To do', label: 'Todo', color: '#a39e93', icon: 'fa-list-ul' },
@@ -47,10 +78,12 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
   const getTaskStatus = React.useCallback((t: Task) => {
     if (t.status === 'Done') return 'Done';
     const dEnd = parseDate(t.planEnd);
-    if (dEnd < today) return 'Overdue';
-    if (t.status === 'To do') return 'To do';
-    if (t.status === 'Doing' || t.status === 'In Progress') return 'Doing';
-    if (t.status === 'Review' || t.status === 'Need Edit') return 'Review';
+    dEnd.setHours(0,0,0,0);
+    if (dEnd < today && t.status !== 'Done') return 'Overdue';
+    const s = (t.status || '').toLowerCase().trim();
+    if (s === 'to do' || s === 'pending') return 'To do';
+    if (s === 'doing' || s === 'in progress') return 'Doing';
+    if (s === 'review' || s === 'need edit') return 'Review';
     return 'To do';
   }, [today]);
 
@@ -72,6 +105,16 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
       percent: Math.round((tasksByStatus[cfg.id].length / totalFiltered) * 100)
     }));
   }, [tasksByStatus, totalFiltered, statusConfigs]);
+
+  // Hàm helper để chuẩn hóa mức độ (cho biểu đồ cột bên phải)
+  // Nếu severity rỗng -> Coi là Low
+  const normalizeSeverity = (sev: string) => {
+      const s = (sev || '').trim().toLowerCase();
+      if (s === 'critical') return 'Critical';
+      if (s === 'high') return 'High';
+      if (s === 'medium') return 'Medium';
+      return 'Low'; 
+  };
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
@@ -103,7 +146,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
               <i className={`fa-solid fa-triangle-exclamation text-xl ${criticalIssuesCount > 0 ? 'text-[#c41e3a] animate-pulse' : 'text-[#a39e93]'}`}></i>
               <span className="heritage-font text-xs font-bold text-[#f2ede4] tracking-widest">RỦI RO HỆ THỐNG</span>
             </div>
-            <span className="code-font text-lg font-black text-[#c41e3a]">{activeIssues.length} ISSUES</span>
+            <span className="code-font text-lg font-black text-[#c41e3a]">{validIssues.length} ISSUES</span>
           </div>
           <div className="mt-4 flex gap-2 relative z-10">
             <div className="bg-[#c41e3a]/10 px-3 py-1 rounded border border-[#c41e3a]/30 flex flex-col">
@@ -112,7 +155,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
             </div>
             <div className="bg-white/5 px-3 py-1 rounded border border-white/10 flex flex-col flex-1">
               <span className="text-[7px] text-[#a39e93] font-black uppercase">Active Owners</span>
-              <span className="text-sm font-bold text-[#f2ede4]">{[...new Set(activeIssues.map(i => i.owner))].length}</span>
+              <span className="text-sm font-bold text-[#f2ede4]">{[...new Set(activeIssues.map(i => i.owner).filter(o => o && o.trim() !== ''))].length}</span>
             </div>
           </div>
         </div>
@@ -120,7 +163,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
 
       {/* SECTION B: CHARTS & ANALYSIS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* 1. Biểu đồ chung (Donut) */}
+        {/* 1. Biểu đồ chung (Donut) - GIỮ NGUYÊN */}
         <div className="lg:col-span-5 bg-[#1a1412] p-10 rounded-3xl border border-[#d4af37]/20 lacquer-gloss flex flex-col items-center shadow-2xl relative min-h-[500px]">
           <h3 className="heritage-font text-lg font-bold text-[#d4af37] tracking-[0.3em] mb-12 text-center uppercase border-b border-[#d4af37]/10 pb-4 w-full">Tổng quan Giao thức</h3>
           <div className="relative w-64 h-64 my-4">
@@ -153,7 +196,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
           </div>
         </div>
 
-        {/* 2. Biểu đồ Phân tích rủi ro Issue */}
+        {/* 2. Biểu đồ Phân tích rủi ro Issue - ĐÃ SỬA LOGIC HIỂN THỊ */}
         <div className="lg:col-span-7 bg-[#1a1412] p-10 rounded-3xl border border-[#d4af37]/20 lacquer-gloss shadow-2xl min-h-[500px] flex flex-col">
           <h3 className="heritage-font text-lg font-bold text-[#c41e3a] tracking-[0.2em] mb-10 uppercase border-b border-[#c41e3a]/10 pb-4">Chỉ số rủi ro vận hành</h3>
           
@@ -178,9 +221,11 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange, setDateRange
 
           <div className="space-y-6 flex-1">
             {['Critical', 'High', 'Medium', 'Low'].map(sev => {
-            const count = issues.filter(i => i.severity === sev).length;
-            const percent = issues.length > 0 ? Math.round((count/issues.length)*100) : 0;
-            const colors: Record<string, string> = { Critical: '#c41e3a', High: '#d4af37', Medium: '#8c7333', Low: '#a39e93' };
+               // Đếm dựa trên validIssues (đã lọc rác) thay vì issues gốc
+               // Và chuẩn hóa severity trước khi đếm
+               const count = validIssues.filter(i => normalizeSeverity(i.severity) === sev).length;
+               const percent = validIssues.length > 0 ? Math.round((count/validIssues.length)*100) : 0;
+               const colors: Record<string, string> = { Critical: '#c41e3a', High: '#d4af37', Medium: '#8c7333', Low: '#a39e93' };
                return (
                  <div key={sev} className="space-y-2">
                    <div className="flex justify-between text-[9px] code-font font-bold uppercase tracking-widest text-[#a39e93]">
