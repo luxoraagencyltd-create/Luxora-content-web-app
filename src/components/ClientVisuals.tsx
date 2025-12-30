@@ -10,14 +10,12 @@ interface Props {
 
 const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
   
-  // Hàm format hiển thị ngày (YYYY-MM-DD -> DD/MM/YYYY)
   const formatDateDisplay = (isoDate: string) => {
     if (!isoDate) return 'N/A';
     const [y, m, d] = isoDate.split('-');
     return `${d}/${m}/${y}`;
   };
 
-  // Hàm xử lý ngày tháng chuẩn
   const parseDate = (dStr: string) => {
     if (!dStr || dStr === 'N/A') return new Date(1970, 0, 1);
     const d = new Date(dStr);
@@ -37,41 +35,43 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
     return d;
   }, []);
 
-  // 1. LỌC TASK THEO NGÀY (Plan End)
+  // --- LOGIC LỌC TASK THÔNG MINH ---
   const filteredTasks = useMemo(() => {
+    // 1. Kiểm tra xem có dữ liệu ở tab 05 không?
+    const hasMasterData = tasks.some(t => t.tab === '05');
+    
+    // 2. Xác định tab nguồn: Nếu có 05 thì ưu tiên dùng 05, không thì dùng 06 (để Client vẫn xem được)
+    const targetTab = hasMasterData ? '05' : '06';
+
     return tasks.filter(t => {
-      if (t.tab !== '05' || !t.id) return false;
+      // Chỉ lấy đúng tab nguồn để tránh trùng lặp số liệu (double counting)
+      if (t.tab !== targetTab || !t.id) return false;
+
       const taskDate = parseDate(t.planEnd);
       const start = new Date(dateRange.start);
       const end = new Date(dateRange.end);
-      // Reset giờ
+      
       taskDate.setHours(0,0,0,0);
       start.setHours(0,0,0,0);
       end.setHours(0,0,0,0);
+
       return taskDate >= start && taskDate <= end;
     });
   }, [tasks, dateRange]);
 
-  // 2. LỌC ISSUE THEO NGÀY (Due Date hoặc Date Raised)
-  // Để biểu đồ rủi ro cũng chạy theo bộ lọc thời gian
   const filteredIssues = useMemo(() => {
     return issues.filter(i => {
-       // Lọc rác
        if (!i.id || !i.summary) return false;
-       
-       // Lọc ngày
        const issueDate = parseDate(i.dueDate || i.dateRaised);
        const start = new Date(dateRange.start);
        const end = new Date(dateRange.end);
        issueDate.setHours(0,0,0,0);
        start.setHours(0,0,0,0);
        end.setHours(0,0,0,0);
-
        return issueDate >= start && issueDate <= end;
     });
   }, [issues, dateRange]);
 
-  // Tính toán Issue trên tập dữ liệu ĐÃ LỌC
   const activeIssues = useMemo(() => filteredIssues.filter(i => {
       const s = (i.status || '').toLowerCase();
       return s !== 'closed' && s !== 'hoàn thành';
@@ -128,7 +128,6 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
 
   return (
     <div className="space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
-      {/* SECTION A: RANGE & QUICK STATS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8 bg-[#1a1412] p-6 rounded-2xl border border-[#d4af37]/20 flex flex-wrap items-center justify-between gap-6 shadow-2xl lacquer-gloss relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-[#d4af37]"></div>
@@ -142,7 +141,6 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
              </div>
           </div>
           
-          {/* 👇 ĐÃ SỬA: Thay thế Input bằng Text hiển thị (Read-only) */}
           <div className="flex items-center gap-3 bg-[#0d0b0a] px-4 py-2 rounded-xl border border-[#d4af37]/30 shadow-inner">
             <span className="text-[#a39e93] text-[10px] code-font uppercase tracking-widest">Active Range:</span>
             <span className="heritage-font text-[#d4af37] text-sm font-bold">
@@ -155,10 +153,8 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
                {formatDateDisplay(dateRange.end)}
             </span>
           </div>
-
         </div>
 
-        {/* ISSUE OVERVIEW CARD */}
         <div className="lg:col-span-4 bg-[#1a1412] p-6 rounded-2xl border border-[#c41e3a]/30 shadow-2xl lacquer-gloss relative group overflow-hidden">
           <div className={`absolute inset-0 bg-[#c41e3a]/5 transition-opacity ${criticalIssuesCount > 0 ? 'opacity-100' : 'opacity-0'}`}></div>
           <div className="flex items-center justify-between relative z-10">
@@ -181,9 +177,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
         </div>
       </div>
 
-      {/* SECTION B: CHARTS & ANALYSIS */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* 1. Biểu đồ chung (Donut) */}
         <div className="lg:col-span-5 bg-[#1a1412] p-10 rounded-3xl border border-[#d4af37]/20 lacquer-gloss flex flex-col items-center shadow-2xl relative min-h-[500px]">
           <h3 className="heritage-font text-lg font-bold text-[#d4af37] tracking-[0.3em] mb-12 text-center uppercase border-b border-[#d4af37]/10 pb-4 w-full">Tổng quan Giao thức</h3>
           <div className="relative w-64 h-64 my-4">
@@ -216,7 +210,6 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
           </div>
         </div>
 
-        {/* 2. Biểu đồ Phân tích rủi ro Issue */}
         <div className="lg:col-span-7 bg-[#1a1412] p-10 rounded-3xl border border-[#d4af37]/20 lacquer-gloss shadow-2xl min-h-[500px] flex flex-col">
           <h3 className="heritage-font text-lg font-bold text-[#c41e3a] tracking-[0.2em] mb-10 uppercase border-b border-[#c41e3a]/10 pb-4">Chỉ số rủi ro vận hành</h3>
           
@@ -241,10 +234,9 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
 
           <div className="space-y-6 flex-1">
             {['Critical', 'High', 'Medium', 'Low'].map(sev => {
-            // Lọc issue theo ngày trước khi đếm
-            const count = filteredIssues.filter(i => normalizeSeverity(i.severity) === sev).length;
-            const percent = filteredIssues.length > 0 ? Math.round((count/filteredIssues.length)*100) : 0;
-            const colors: Record<string, string> = { Critical: '#c41e3a', High: '#d4af37', Medium: '#8c7333', Low: '#a39e93' };
+               const count = filteredIssues.filter(i => normalizeSeverity(i.severity) === sev).length;
+               const percent = filteredIssues.length > 0 ? Math.round((count/filteredIssues.length)*100) : 0;
+               const colors: Record<string, string> = { Critical: '#c41e3a', High: '#d4af37', Medium: '#8c7333', Low: '#a39e93' };
                return (
                  <div key={sev} className="space-y-2">
                    <div className="flex justify-between text-[9px] code-font font-bold uppercase tracking-widest text-[#a39e93]">
