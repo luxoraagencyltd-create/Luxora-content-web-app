@@ -33,7 +33,7 @@ const App: React.FC = () => {
   const [dateRange, setDateRange] = useState({ start: '2025-01-01', end: '2026-12-31' });
   const [activeTab, setActiveTab] = useState<'05' | '06'>('05'); 
   
-  const [waitingForFeedback, setWaitingForFeedback] = useState<string | null>(null);
+  // ĐÃ XÓA waitingForFeedback VÌ KHÔNG DÙNG ĐẾN
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   
@@ -48,7 +48,8 @@ const App: React.FC = () => {
   const [pendingFeedbackTask, setPendingFeedbackTask] = useState<string | null>(null); 
   const [feedbackAccumulator, setFeedbackAccumulator] = useState<string[]>([]); 
 
-  // Ref để lưu tasks cũ nhằm so sánh mà không gây re-render loop
+  // Ref để lock tránh double trigger
+  const isFetchingRef = useRef(false);
   const prevTasksRef = useRef<Task[]>([]);
 
   const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
@@ -63,23 +64,18 @@ const App: React.FC = () => {
     }
   }, [currentUser]);
 
-  // --- 1. TỰ ĐỘNG TRIGGER (AUTO POLLING) ---
   useEffect(() => {
     if (!selectedProjectId) return;
-    
-    // Cứ 15 giây tự động quét 1 lần
     const interval = setInterval(() => {
-        syncWithSheet(true); // true = silent mode (không hiện loading)
+        syncWithSheet(true); 
     }, 15000); 
-
     return () => clearInterval(interval);
-  }, [selectedProjectId]); // Chỉ reset khi đổi project
+  }, [selectedProjectId]); 
 
-  // Hàm phát âm thanh
   const playSound = () => {
     try {
         const audio = new Audio(NOTIFICATION_SOUND);
-        audio.play().catch(e => console.log("Audio blocked interact needed:", e));
+        audio.play().catch(e => console.log("Audio blocked:", e));
     } catch (e) {}
   };
 
@@ -101,29 +97,25 @@ const App: React.FC = () => {
     setLogs(prev => [newLog, ...prev].slice(0, 50));
   }, [selectedProjectId]);
 
-  // --- HÀM SYNC DỮ LIỆU (CÓ LOGIC TRIGGER NOTI) ---
   const syncWithSheet = useCallback(async (isSilent = false) => {
     if (!selectedProjectId) return;
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     
-    if (!isSilent) setIsLoading(true); // Chỉ hiện loading khi bấm tay
+    if (!isSilent) setIsLoading(true);
     if (!isSilent) addLog("Kích hoạt giao thức đồng bộ thực địa...", "INFO");
     
     try {
       const scriptUrl = currentProject?.webAppUrl || appConfig.webAppUrl || APPS_SCRIPT_URL;
-      
-      let finalUrl;
-      if (import.meta.env.DEV && !window.location.host.includes('vercel')) {
-         finalUrl = `/api/proxy?action=getAllData&projectId=${encodeURIComponent(selectedProjectId)}&target=${encodeURIComponent(scriptUrl)}`;
-      } else {
-         finalUrl = `/api/proxy?action=getAllData&projectId=${encodeURIComponent(selectedProjectId)}&target=${encodeURIComponent(scriptUrl)}`;
-      }
+      let finalUrl = (import.meta.env.DEV && !window.location.host.includes('vercel')) 
+            ? `/api/proxy?action=getAllData&projectId=${encodeURIComponent(selectedProjectId)}&target=${encodeURIComponent(scriptUrl)}`
+            : `/api/proxy?action=getAllData&projectId=${encodeURIComponent(selectedProjectId)}&target=${encodeURIComponent(scriptUrl)}`;
 
       const response = await fetch(finalUrl);
       const text = await response.text();
       let result: any;
       try { result = JSON.parse(text); } catch (err) {
         if (!isSilent) addLog('Lỗi dữ liệu JSON từ Server.', 'WARNING');
-        setIsLoading(false);
         return;
       }
       
@@ -167,7 +159,6 @@ const App: React.FC = () => {
         fetchedTasks = [...fetchedTasks, ...t06];
       }
       
-      // Xử lý Issue
       if (Array.isArray(result.issues)) {
          setIssues(result.issues.map((row: Record<string, unknown>) => {
             const findValue = (keywords: string[]) => {
@@ -198,38 +189,31 @@ const App: React.FC = () => {
          }));
       }
 
-      // --- 👇 LOGIC TRIGGER MESSAGE KHI CÓ STATUS REVIEW 👇 ---
-      // So sánh dữ liệu mới (fetchedTasks) với dữ liệu cũ (prevTasksRef.current)
-      // Chỉ chạy logic này khi đã có dữ liệu cũ (để tránh báo lúc mới F5 trang)
       if (prevTasksRef.current.length > 0) {
+        const triggeredIds = new Set();
         fetchedTasks.forEach(newTask => {
             const oldTask = prevTasksRef.current.find(t => t.id === newTask.id);
-            
-            // Điều kiện: Task cũ chưa là Review -> Task mới là Review
             if (oldTask && oldTask.status !== 'Review' && newTask.status === 'Review') {
-                
-                // 1. Phát âm thanh
-                playSound();
-
-                // 2. Tạo tin nhắn hệ thống
-                const triggerMsg: ReviewMessage = {
-                    id: Math.random().toString(),
-                    projectId: selectedProjectId,
-                    senderId: 'SYSTEM',
-                    senderName: 'HỆ THỐNG',
-                    senderRole: 'ADMIN',
-                    text: `[${newTask.id}] [${newTask.name}]\ncần review`, // Đúng format yêu cầu
-                    timestamp: new Date(),
-                    type: 'NOTIFICATION'
-                };
-                setMessages(prev => [...prev, triggerMsg]);
-                
-                addLog(`🔔 New Trigger: ${newTask.id} cần review!`, 'SUCCESS');
+                if (!triggeredIds.has(newTask.id)) {
+                    triggeredIds.add(newTask.id);
+                    playSound();
+                    const triggerMsg: ReviewMessage = {
+                        id: Math.random().toString(),
+                        projectId: selectedProjectId,
+                        senderId: 'SYSTEM',
+                        senderName: 'HỆ THỐNG',
+                        senderRole: 'ADMIN',
+                        text: `[${newTask.id}] [${newTask.name}]\ncần review`, 
+                        timestamp: new Date(),
+                        type: 'NOTIFICATION'
+                    };
+                    setMessages(prev => [...prev, triggerMsg]);
+                    addLog(`🔔 New Trigger: ${newTask.id} cần review!`, 'SUCCESS');
+                }
             }
         });
       }
 
-      // Cập nhật State và Ref
       setTasks(fetchedTasks);
       prevTasksRef.current = fetchedTasks;
 
@@ -238,6 +222,7 @@ const App: React.FC = () => {
       console.error(error);
       if (!isSilent) addLog("Giao thức đồng bộ thất bại.", "WARNING");
     } finally {
+      isFetchingRef.current = false;
       setIsLoading(false);
     }
   }, [selectedProjectId, addLog, appConfig, currentProject]);
@@ -249,12 +234,7 @@ const App: React.FC = () => {
     return () => { unsubUsers(); unsubProjects(); unsubConfig(); };
   }, []);
 
-  useEffect(() => { 
-      // Lần đầu vào tự sync ngay
-      if (selectedProjectId) syncWithSheet(); 
-  }, [selectedProjectId]); 
-  // Lưu ý: bỏ syncWithSheet ra khỏi dependency để tránh loop nếu không dùng useCallback chuẩn, 
-  // nhưng ở trên đã dùng useCallback nên có thể để hoặc bỏ đều được, ở đây bỏ để an toàn.
+  useEffect(() => { if (selectedProjectId) syncWithSheet(); }, [selectedProjectId]); // Bỏ syncWithSheet khỏi dependency để tránh loop
 
   const handleUpdateProject = async (p: Project) => await setDoc(doc(db, 'projects', p.id), p);
   const handleCreateProject = async (p: Partial<Project>) => await setDoc(doc(db, 'projects', p.id || `P-${Date.now()}`), { ...p, id: p.id || `P-${Date.now()}`, clientIds: [], staffIds: [] } as Project);
@@ -288,7 +268,7 @@ const App: React.FC = () => {
         const draft = `[${task.id}] [${task.name}]\nCần sửa với nội dung: `;
         setChatDraft(draft);
         setPendingFeedbackTask(taskId);
-        setWaitingForFeedback(taskId);
+        // Đã xóa setWaitingForFeedback ở đây vì không còn dùng biến này nữa
         setFeedbackAccumulator([]); 
         addLog(`Bắt đầu phiên Feedback cho Node ${taskId}...`, 'INFO');
       }
@@ -320,7 +300,7 @@ const App: React.FC = () => {
       }
 
       setPendingFeedbackTask(null);
-      setWaitingForFeedback(null);
+      // Đã xóa setWaitingForFeedback(null)
       setFeedbackAccumulator([]);
     }
   };
@@ -446,7 +426,6 @@ const App: React.FC = () => {
                 <section className="flex-1 bg-[#1a1412] rounded-2xl border border-[#d4af37]/20 p-1 overflow-hidden flex flex-col shadow-2xl">
                     <div className="p-3 bg-[#0d0b0a] border-b border-[#d4af37]/20 flex gap-4 justify-between items-center">
                       <div className="flex gap-4">
-                        {/* Ẩn Tab 06 nếu là Client */}
                         {currentUser?.role !== 'CLIENT' ? (
                           <>
                             <button onClick={() => { setActiveTab('05'); setStatusFilter(null); }} className={`px-4 py-1 text-[10px] font-bold heritage-font transition-all ${activeTab === '05' ? 'text-[#d4af37] border-b-2 border-[#d4af37]' : 'text-[#a39e93]'}`}>05. TASK MASTER</button>
