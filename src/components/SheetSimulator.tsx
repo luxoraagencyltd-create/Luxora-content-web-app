@@ -100,17 +100,22 @@ const SheetSimulator: React.FC<Props> = ({ tasks, onTaskSubmit, currentTab }) =>
   );
 };
 
+// Cuối file SheetSimulator.tsx
+
 const StatusBadge = ({ status }: { status: string }) => {
   const s = (status || '').toLowerCase().trim();
-  let style = "bg-[#1a1412] text-[#a39e93] border-[#a39e93]/30";
-  let label = status;
+  
+  // Mặc định (To do)
+  let style = "border-[#94a3b8] text-[#94a3b8] bg-[#94a3b8]/10"; // Xám
 
-  if (s === 'done') style = "border-[#00f2ff] text-[#00f2ff] bg-[#00f2ff]/5";
-  else if (s === 'review') style = "border-[#d4af37] text-[#d4af37] bg-[#d4af37]/5";
-  else if (s === 'need edit') style = "border-[#c41e3a] text-[#c41e3a] bg-[#c41e3a]/5 animate-pulse";
-  else if (s === 'doing' || s === 'in progress') style = "border-[#f2ede4] text-[#f2ede4] bg-[#f2ede4]/10";
+  if (s === 'done') style = "border-[#22c55e] text-[#22c55e] bg-[#22c55e]/10 shadow-[0_0_10px_rgba(34,197,94,0.2)]"; // Xanh lá
+  else if (s === 'review') style = "border-[#eab308] text-[#eab308] bg-[#eab308]/10 shadow-[0_0_10px_rgba(234,179,8,0.2)]"; // Vàng
+  else if (s === 'doing' || s === 'in progress') style = "border-[#3b82f6] text-[#3b82f6] bg-[#3b82f6]/10 shadow-[0_0_10px_rgba(59,130,246,0.2)]"; // Xanh dương
+  else if (s === 'need edit') style = "border-[#f97316] text-[#f97316] bg-[#f97316]/10 animate-pulse"; // Cam đất
+  else if (s === 'cancel') style = "border-[#ef4444] text-[#ef4444] bg-[#ef4444]/10"; // Đỏ
+  else if (s === 'pending') style = "border-[#ec4899] text-[#ec4899] bg-[#ec4899]/10"; // Hồng
 
-  return <span className={`code-font px-2 py-0.5 rounded text-[8px] font-black uppercase border tracking-widest ${style}`}>{label}</span>;
+  return <span className={`code-font px-2 py-0.5 rounded text-[8px] font-black uppercase border tracking-widest ${style}`}>{status}</span>;
 };
 
 export default SheetSimulator;

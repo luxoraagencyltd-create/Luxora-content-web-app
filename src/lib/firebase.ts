@@ -1,6 +1,7 @@
 
 import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
+import { getMessaging } from "firebase/messaging";
 
 // Use Vite's import.meta.env in the browser. Fall back to hardcoded config when env vars are not provided.
 const env = import.meta.env as Record<string, any>;
@@ -17,3 +18,4 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
+export const messaging = getMessaging(app);

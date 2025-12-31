@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Task, ReviewMessage, LogEntry, Project, User, Issue } from './types';
 import { db } from './lib/firebase';
-import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, orderBy, limit } from 'firebase/firestore';
+import { collection, onSnapshot, doc, setDoc, deleteDoc, addDoc, query, where, orderBy, limit, getDocs } from 'firebase/firestore';
 import Sidebar from './components/Sidebar';
 import SheetSimulator from './components/SheetSimulator';
 import ReviewPortal from './components/ReviewPortal';
@@ -12,7 +12,8 @@ import ProjectSelector from './components/ProjectSelector';
 import ClientVisuals from './components/ClientVisuals';
 import IssueLog from './components/IssueLog';
 import PWAPrompt from './components/PWAPrompt';
-import MobileNavbar from './components/MobileNavbar'; // 👇 IMPORT MỚI
+import MobileNavbar from './components/MobileNavbar';
+import { requestNotificationPermission } from './lib/notification'; 
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFTCYBBwC2s0Cu0KQkAjnJ15P9FmQx68orggfKhUtRMiA-VP2EaXWfruOCTfEmXdDUkQ/exec";
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
@@ -63,6 +64,9 @@ const App: React.FC = () => {
         setActiveTab('06');
       } else {
         setActiveTab('05');
+      }
+      if ('serviceWorker' in navigator) {
+         requestNotificationPermission(currentUser.id);
       }
     }
   }, [currentUser]);
@@ -132,7 +136,28 @@ const App: React.FC = () => {
 
   const createSystemNotification = async (taskName: string, taskId: string) => {
     if (!selectedProjectId) return;
+    
+    // Tạo một "mã kiểm tra" duy nhất cho sự kiện này
+    // Ví dụ: Social-03Jan2026-01_REVIEW_ALERT
+    const triggerKey = `${taskId}_REVIEW_ALERT`; 
+
     try {
+      // 1. Kiểm tra trên Firebase xem tin nhắn này đã tồn tại chưa
+      const q = query(
+        collection(db, 'messages'),
+        where('projectId', '==', selectedProjectId),
+        where('triggerKey', '==', triggerKey) // Tìm theo mã kiểm tra
+      );
+
+      const existingDocs = await getDocs(q);
+
+      // 2. Nếu đã có rồi -> Dừng lại, không gửi nữa
+      if (!existingDocs.empty) {
+        console.log(`Thông báo cho ${taskId} đã tồn tại. Bỏ qua.`);
+        return;
+      }
+
+      // 3. Nếu chưa có -> Gửi tin nhắn mới kèm theo mã triggerKey
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
         senderId: 'SYSTEM',
@@ -140,9 +165,13 @@ const App: React.FC = () => {
         senderRole: 'ADMIN',
         text: `STATUS UPDATE: [${taskId}] ${taskName} >> REVIEW_MODE_ACTIVATED`,
         timestamp: new Date(),
-        type: 'NOTIFICATION'
+        type: 'NOTIFICATION',
+        triggerKey: triggerKey // Lưu mã này để lần sau check trùng
       });
-    } catch (e) {}
+      
+    } catch (e) {
+      console.error("Lỗi gửi thông báo:", e);
+    }
   };
 
   const syncWithSheet = useCallback(async (isSilent = false) => {

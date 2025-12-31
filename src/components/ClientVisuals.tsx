@@ -10,7 +10,7 @@ interface Props {
 
 const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
   
-  // --- HELPERS ---
+  // --- FORMAT NGÀY ---
   const formatDateDisplay = (dateStr: string) => {
     if (!dateStr || dateStr === 'N/A' || dateStr.trim() === '') return '-';
     const date = new Date(dateStr);
@@ -47,7 +47,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
     return d;
   }, []);
 
-  // --- LOGIC DATA ---
+  // --- LỌC DỮ LIỆU ---
   const masterTasks = useMemo(() => tasks.filter(t => t.tab === '05'), [tasks]);
   
   const filteredTasks = useMemo(() => {
@@ -55,6 +55,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
     return sourceTasks.filter(t => {
       if (!t.id) return false;
       const taskDate = parseDate(t.planEnd);
+      // Nếu không có Plan End, mặc định cho hiện
       if (!taskDate) return true; 
 
       const start = new Date(dateRange.start);
@@ -67,49 +68,37 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
     });
   }, [tasks, masterTasks, dateRange]);
 
-  const filteredIssues = useMemo(() => {
-    return issues.filter(i => {
-       if (!i.id || !i.summary) return false;
-       const issueDate = parseDate(i.dueDate || i.dateRaised);
-       if (!issueDate) return true;
-       const start = new Date(dateRange.start);
-       const end = new Date(dateRange.end);
-       issueDate.setHours(0,0,0,0);
-       start.setHours(0,0,0,0);
-       end.setHours(0,0,0,0);
-       return issueDate >= start && issueDate <= end;
-    });
-  }, [issues, dateRange]);
-
-  const activeIssues = useMemo(() => filteredIssues.filter(i => {
-      const s = (i.status || '').toLowerCase();
-      return s !== 'closed' && s !== 'hoàn thành';
-  }), [filteredIssues]);
-
-  const criticalIssuesCount = useMemo(() => activeIssues.filter(i => (i.severity || '').trim().toLowerCase() === 'critical').length, [activeIssues]);
-
-  // --- STATS CONFIG ---
-  const statusConfigs = useMemo((): { id: string; label: string; color: string; icon: string }[] => [
-    { id: 'To do', label: 'Todo', color: '#a39e93', icon: 'fa-list-ul' },
-    { id: 'Doing', label: 'In Progress', color: '#f2ede4', icon: 'fa-spinner' },
-    { id: 'Review', label: 'Review', color: '#d4af37', icon: 'fa-eye' },
-    { id: 'Overdue', label: 'Trễ Deadline', color: '#c41e3a', icon: 'fa-triangle-exclamation' },
-    { id: 'Done', label: 'Done', color: '#00f2ff', icon: 'fa-check-double' },
-  ], []);
-
+  // --- LOGIC PHÂN LOẠI TRẠNG THÁI (MỚI) ---
   const getTaskStatus = React.useCallback((t: Task) => {
-    if (t.status === 'Done') return 'Done';
+    const s = (t.status || '').toLowerCase().trim();
+
+    // 1. Ưu tiên cao nhất: DONE
+    if (s === 'done') return 'Done';
+    
+    // 2. Ưu tiên nhì: QUÁ HẠN (Overdue)
+    // Nếu chưa Done mà Plan End < Hôm nay -> Tính là Overdue (kể cả đang Review hay Doing)
     const dEnd = parseDate(t.planEnd);
     if (dEnd) {
        dEnd.setHours(0,0,0,0);
-       if (dEnd < today && t.status !== 'Done') return 'Overdue';
+       if (dEnd < today) return 'Overdue';
     }
-    const s = (t.status || '').toLowerCase().trim();
-    if (s === 'to do' || s === 'pending') return 'To do';
-    if (s === 'doing' || s === 'in progress') return 'Doing';
+
+    // 3. Các trạng thái còn lại (Chưa quá hạn)
     if (s === 'review' || s === 'need edit') return 'Review';
+    if (s === 'doing' || s === 'in progress') return 'Doing';
+    if (s === 'cancel') return 'Cancel';
+
+    // Mặc định
     return 'To do';
   }, [today]);
+
+  const statusConfigs = useMemo((): { id: string; label: string; color: string; icon: string }[] => [
+    { id: 'To do', label: 'Todo', color: '#94a3b8', icon: 'fa-list-ul' },
+    { id: 'Doing', label: 'In Progress', color: '#3b82f6', icon: 'fa-spinner' },
+    { id: 'Review', label: 'Review', color: '#eab308', icon: 'fa-eye' },
+    { id: 'Done', label: 'Done', color: '#22c55e', icon: 'fa-check-double' },
+    { id: 'Overdue', label: 'Trễ Deadline', color: '#ef4444', icon: 'fa-triangle-exclamation' },
+  ], []);
 
   const tasksByStatus = useMemo(() => {
     const map: Record<string, Task[]> = {};
@@ -130,6 +119,28 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
     }));
   }, [tasksByStatus, totalFiltered, statusConfigs]);
 
+  // --- LOGIC ISSUE ---
+  const filteredIssues = useMemo(() => {
+    return issues.filter(i => {
+       if (!i.id || !i.summary) return false;
+       const issueDate = parseDate(i.dueDate || i.dateRaised);
+       if (!issueDate) return true;
+       const start = new Date(dateRange.start);
+       const end = new Date(dateRange.end);
+       issueDate.setHours(0,0,0,0);
+       start.setHours(0,0,0,0);
+       end.setHours(0,0,0,0);
+       return issueDate >= start && issueDate <= end;
+    });
+  }, [issues, dateRange]);
+
+  const activeIssues = useMemo(() => filteredIssues.filter(i => {
+      const s = (i.status || '').toLowerCase();
+      return s !== 'closed' && s !== 'hoàn thành';
+  }), [filteredIssues]);
+
+  const criticalIssuesCount = useMemo(() => activeIssues.filter(i => (i.severity || '').trim().toLowerCase() === 'critical').length, [activeIssues]);
+  
   const normalizeSeverity = (sev: string) => {
       const s = (sev || '').trim().toLowerCase();
       if (s === 'critical') return 'Critical';
@@ -138,12 +149,23 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
       return 'Low'; 
   };
 
+  // --- STYLES ---
   const getPriorityStyle = (p: string) => {
       const s = (p || '').toLowerCase().trim();
       if (s === 'critical') return 'bg-[#c41e3a] text-white shadow-[0_0_8px_#c41e3a]';
       if (s === 'high') return 'bg-[#d4af37] text-black';
       if (s === 'medium') return 'bg-[#8c7333] text-white';
       return 'bg-[#a39e93] text-black';
+  };
+
+  const getStatusStyle = (status: string) => {
+     const s = (status || '').toLowerCase().trim();
+     if (s === 'done') return "border-[#22c55e] text-[#22c55e] bg-[#22c55e]/10";
+     if (s === 'review') return "border-[#eab308] text-[#eab308] bg-[#eab308]/10";
+     if (s === 'doing' || s === 'in progress') return "border-[#3b82f6] text-[#3b82f6] bg-[#3b82f6]/10";
+     if (s === 'need edit') return "border-[#f97316] text-[#f97316] bg-[#f97316]/10";
+     if (s === 'cancel') return "border-[#ef4444] text-[#ef4444] bg-[#ef4444]/10";
+     return "border-[#94a3b8] text-[#94a3b8] bg-[#94a3b8]/10";
   };
 
   const getSlackStyle = (val: string) => {
@@ -201,9 +223,9 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
         </div>
       </div>
 
-      {/* --- PHẦN 2: CHART & RISK (ĐÃ THÊM LẠI ĐẦY ĐỦ) --- */}
+      {/* --- CHART & RISK --- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* 1. DONUT CHART */}
+        {/* DONUT CHART */}
         <div className="lg:col-span-5 bg-[#1a1412] p-10 rounded-3xl border border-[#d4af37]/20 lacquer-gloss flex flex-col items-center shadow-2xl relative min-h-[500px]">
           <h3 className="heritage-font text-lg font-bold text-[#d4af37] tracking-[0.3em] mb-12 text-center uppercase border-b border-[#d4af37]/10 pb-4 w-full">Tổng quan Giao thức</h3>
           <div className="relative w-64 h-64 my-4">
@@ -234,7 +256,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
           </div>
         </div>
 
-        {/* 2. RISK ANALYSIS */}
+        {/* RISK ANALYSIS */}
         <div className="lg:col-span-7 bg-[#1a1412] p-10 rounded-3xl border border-[#d4af37]/20 lacquer-gloss shadow-2xl min-h-[500px] flex flex-col">
           <h3 className="heritage-font text-lg font-bold text-[#c41e3a] tracking-[0.2em] mb-10 uppercase border-b border-[#c41e3a]/10 pb-4">Chỉ số rủi ro vận hành</h3>
           <div className="grid grid-cols-2 gap-6 mb-8">
@@ -274,17 +296,10 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
                )
              })}
           </div>
-
-          <div className="mt-8 p-4 bg-[#c41e3a]/5 border border-[#c41e3a]/20 rounded-xl">
-               <p className="code-font text-[9px] text-[#f2ede4]/60 leading-relaxed">
-               <i className="fa-solid fa-circle-info mr-2 text-[#c41e3a]"></i>
-               Dữ liệu Issue được trích xuất trực tiếp từ tab <span className="text-[#c41e3a] font-bold">Issue Log</span>. Hội viên nên ưu tiên xem xét các sự cố Critical để tránh gián đoạn tiến độ chung.
-             </p>
-          </div>
         </div>
       </div>
 
-      {/* --- PHẦN 3: BẢNG CHI TIẾT TASK (TASK MASTER) --- */}
+      {/* --- TABLE (TASK MASTER) --- */}
       <div className="bg-[#1a1412] rounded-3xl border border-[#d4af37]/20 p-8 shadow-2xl lacquer-gloss animate-in fade-in slide-in-from-bottom-8">
          <div className="flex justify-between items-center mb-6 border-b border-[#d4af37]/10 pb-4">
             <h3 className="heritage-font text-lg font-bold text-[#d4af37] tracking-[0.3em] uppercase">CHI TIẾT TIẾN ĐỘ (TASK MASTER)</h3>
@@ -310,9 +325,10 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
                        <td className="p-4 code-font text-[#00f2ff] font-bold">{t.id}</td>
                        <td className="p-4 font-bold text-[#f2ede4] italic">{t.name}</td>
                        <td className="p-4 text-center">
-                          <span className={`px-2 py-0.5 rounded text-[9px] font-black border uppercase ${
-                             t.status.toLowerCase() === 'done' ? 'border-[#00f2ff] text-[#00f2ff] bg-[#00f2ff]/10' : 'border-[#a39e93] text-[#a39e93]'
-                          }`}>{t.status}</span>
+                          {/* Dùng getStatusStyle để hiện đúng màu trạng thái */}
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-black border uppercase ${getStatusStyle(t.status)}`}>
+                             {t.status}
+                          </span>
                        </td>
                        <td className="p-4 text-center">
                           <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${getPriorityStyle(t.priority || '')}`}>
