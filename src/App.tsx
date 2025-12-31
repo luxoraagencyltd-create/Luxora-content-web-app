@@ -167,23 +167,45 @@ const App: React.FC = () => {
         return;
       }
       
+      
       let fetchedTasks: Task[] = [];
+
+      // 👇 CẬP NHẬT ĐOẠN NÀY
       if (result.tasks05) {
-        const t05 = result.tasks05.map((row: any) => ({
-          id: String(row['id'] || row['ID task'] || ''),
-          projectId: selectedProjectId,
-          phase: row.phase || row['Giai đoạn (Phase)'],
-          name: String(row['name'] || row['Tên công việc (Task Name)'] || ''),
-          status: String(row['status'] || row['Trạng thái (Status)'] || 'To do'),
-          priority: String(row['priority'] || row['Ưu tiên (Priority)'] || ''),
-          planStart: String(row['planStart'] || row['Plan Start'] || ''),
-          duration: parseInt(String(row['duration'] || '0')) || 0,
-          planEnd: String(row['planEnd'] || row['Plan End'] || ''),
-          link: String(row['link'] || '#'),
-          staff: String(row['staff'] || row['Người thực hiện (Assignee)'] || ''),
-          feedbacks: [],
-          tab: '05' as const
-        }));
+        const t05 = result.tasks05.map((row: any) => {
+          // Hàm tìm giá trị thông minh (bất chấp xuống dòng, hoa thường)
+          const getValue = (keywords: string[]) => {
+            const key = Object.keys(row).find(k => 
+              keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase()))
+            );
+            return key ? String(row[key]) : '';
+          };
+
+          return {
+            id: String(getValue(['id', 'id task'])),
+            projectId: selectedProjectId,
+            phase: getValue(['phase', 'giai đoạn']),
+            name: getValue(['name', 'tên công việc', 'task name']),
+            status: getValue(['status', 'trạng thái']) || 'To do',
+            priority: getValue(['priority', 'ưu tiên']),
+            
+            // 👇 Tìm cột Plan Start (bất chấp (MM/DD/YY))
+            planStart: getValue(['plan start', 'start']), 
+            
+            duration: parseInt(getValue(['duration'])) || 0,
+            
+            // 👇 Tìm cột Plan End (bất chấp (MM/DD/YY))
+            planEnd: getValue(['plan end', 'end']), 
+            
+            // 👇 Tìm cột Slack (Độ trễ)
+            slack: getValue(['độ trễ']),
+            
+            link: getValue(['link', 'link file']) || '#',
+            staff: getValue(['staff', 'người thực hiện', 'assignee']),
+            feedbacks: [],
+            tab: '05' as const
+          };
+        });
         fetchedTasks = [...fetchedTasks, ...t05];
       }
       

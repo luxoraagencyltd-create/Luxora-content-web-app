@@ -10,39 +10,35 @@ interface Props {
 
 const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
   
-  const formatDateDisplay = (isoDate: string) => {
-    if (!isoDate) return 'N/A';
-    const [y, m, d] = isoDate.split('-');
-    return `${d}/${m}/${y}`;
+  // --- HELPERS ---
+  const formatDateDisplay = (dateStr: string) => {
+    if (!dateStr || dateStr === 'N/A' || dateStr.trim() === '') return '-';
+    const date = new Date(dateStr);
+    if (!isNaN(date.getTime())) {
+       const day = date.getDate().toString().padStart(2, '0');
+       const month = (date.getMonth() + 1).toString().padStart(2, '0');
+       const year = date.getFullYear();
+       return `${day}/${month}/${year}`;
+    }
+    return dateStr;
   };
 
-  // --- HÀM XỬ LÝ NGÀY MỚI (MẠNH MẼ HƠN) ---
   const parseDate = (dStr: string) => {
     if (!dStr || dStr === 'N/A' || dStr.trim() === '') return null;
-    
-    // Trường hợp 1: ISO String (2025-12-25T...)
     const d = new Date(dStr);
     if (!isNaN(d.getTime())) return d;
-
-    // Trường hợp 2: dd/MMM/yyyy (26/Dec/2025) - Format từ Sheet của bạn
     try {
-      const parts = dStr.split(/[/-]/); // Tách bằng / hoặc -
+      const parts = dStr.split(/[/-]/);
       if (parts.length === 3) {
          const day = parseInt(parts[0]);
          const monthStr = parts[1];
          const year = parseInt(parts[2]);
-         
          const months = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
-         // Tìm index tháng (không phân biệt hoa thường)
          const mIdx = months.findIndex(m => m === monthStr.toLowerCase());
-         
-         if (mIdx !== -1) {
-            return new Date(year, mIdx, day);
-         }
+         if (mIdx !== -1) return new Date(year, mIdx, day);
       }
-    } catch (e) { console.error("Date parse error:", e); }
-    
-    return null; // Trả về null nếu không parse được
+    } catch (e) {}
+    return null;
   };
 
   const today = useMemo(() => {
@@ -51,40 +47,31 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
     return d;
   }, []);
 
-  // --- LOGIC LỌC TASK (Dựa trên Plan End - Cột K) ---
+  // --- LOGIC DATA ---
+  const masterTasks = useMemo(() => tasks.filter(t => t.tab === '05'), [tasks]);
+  
   const filteredTasks = useMemo(() => {
-    // Ưu tiên lấy dữ liệu từ TAB 05 (Task Master) để vẽ biểu đồ tổng quan
-    // Nếu không có data 05 thì mới lấy 06
-    const masterTasks = tasks.filter(t => t.tab === '05');
     const sourceTasks = masterTasks.length > 0 ? masterTasks : tasks.filter(t => t.tab === '06');
-
     return sourceTasks.filter(t => {
-      // Bỏ qua task không có ID
       if (!t.id) return false;
-
       const taskDate = parseDate(t.planEnd);
-      
-      // Nếu không có ngày Plan End -> Mặc định CHO HIỆN (hoặc return false để ẩn)
       if (!taskDate) return true; 
 
       const start = new Date(dateRange.start);
       const end = new Date(dateRange.end);
-      
-      // Reset giờ để so sánh chính xác
       taskDate.setHours(0,0,0,0);
       start.setHours(0,0,0,0);
       end.setHours(0,0,0,0);
 
       return taskDate >= start && taskDate <= end;
     });
-  }, [tasks, dateRange]);
+  }, [tasks, masterTasks, dateRange]);
 
   const filteredIssues = useMemo(() => {
     return issues.filter(i => {
        if (!i.id || !i.summary) return false;
        const issueDate = parseDate(i.dueDate || i.dateRaised);
        if (!issueDate) return true;
-
        const start = new Date(dateRange.start);
        const end = new Date(dateRange.end);
        issueDate.setHours(0,0,0,0);
@@ -101,6 +88,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
 
   const criticalIssuesCount = useMemo(() => activeIssues.filter(i => (i.severity || '').trim().toLowerCase() === 'critical').length, [activeIssues]);
 
+  // --- STATS CONFIG ---
   const statusConfigs = useMemo((): { id: string; label: string; color: string; icon: string }[] => [
     { id: 'To do', label: 'Todo', color: '#a39e93', icon: 'fa-list-ul' },
     { id: 'Doing', label: 'In Progress', color: '#f2ede4', icon: 'fa-spinner' },
@@ -112,13 +100,10 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
   const getTaskStatus = React.useCallback((t: Task) => {
     if (t.status === 'Done') return 'Done';
     const dEnd = parseDate(t.planEnd);
-    
-    // Nếu có ngày Plan End và nhỏ hơn hôm nay -> Overdue
     if (dEnd) {
        dEnd.setHours(0,0,0,0);
        if (dEnd < today && t.status !== 'Done') return 'Overdue';
     }
-
     const s = (t.status || '').toLowerCase().trim();
     if (s === 'to do' || s === 'pending') return 'To do';
     if (s === 'doing' || s === 'in progress') return 'Doing';
@@ -153,8 +138,26 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
       return 'Low'; 
   };
 
+  const getPriorityStyle = (p: string) => {
+      const s = (p || '').toLowerCase().trim();
+      if (s === 'critical') return 'bg-[#c41e3a] text-white shadow-[0_0_8px_#c41e3a]';
+      if (s === 'high') return 'bg-[#d4af37] text-black';
+      if (s === 'medium') return 'bg-[#8c7333] text-white';
+      return 'bg-[#a39e93] text-black';
+  };
+
+  const getSlackStyle = (val: string) => {
+     if (!val || val === '-') return 'text-[#a39e93]';
+     const num = parseInt(val);
+     if (isNaN(num)) return 'text-[#f2ede4]';
+     if (num > 0) return 'text-[#c41e3a] font-black animate-pulse';
+     return 'text-[#00f2ff] font-bold'; 
+  };
+
   return (
     <div className="space-y-8 pb-12 animate-in fade-in slide-in-from-bottom-4 duration-700">
+      
+      {/* FILTER HEADER */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         <div className="lg:col-span-8 bg-[#1a1412] p-6 rounded-2xl border border-[#d4af37]/20 flex flex-wrap items-center justify-between gap-6 shadow-2xl lacquer-gloss relative overflow-hidden">
           <div className="absolute top-0 left-0 w-1 h-full bg-[#d4af37]"></div>
@@ -167,21 +170,15 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
                <p className="code-font text-[9px] text-[#a39e93] uppercase tracking-widest mt-1">Phạm vi quan sát dữ liệu</p>
              </div>
           </div>
-          
           <div className="flex items-center gap-3 bg-[#0d0b0a] px-4 py-2 rounded-xl border border-[#d4af37]/30 shadow-inner">
             <span className="text-[#a39e93] text-[10px] code-font uppercase tracking-widest">Active Range:</span>
-            <span className="heritage-font text-[#d4af37] text-sm font-bold">
-               {formatDateDisplay(dateRange.start)}
-            </span>
-            <span className="text-[#a39e93] text-xs px-1">
-               <i className="fa-solid fa-arrow-right-long"></i>
-            </span>
-            <span className="heritage-font text-[#d4af37] text-sm font-bold">
-               {formatDateDisplay(dateRange.end)}
-            </span>
+            <span className="heritage-font text-[#d4af37] text-sm font-bold">{formatDateDisplay(dateRange.start)}</span>
+            <span className="text-[#a39e93] text-xs px-1"><i className="fa-solid fa-arrow-right-long"></i></span>
+            <span className="heritage-font text-[#d4af37] text-sm font-bold">{formatDateDisplay(dateRange.end)}</span>
           </div>
         </div>
-
+        
+        {/* ISSUE OVERVIEW CARD */}
         <div className="lg:col-span-4 bg-[#1a1412] p-6 rounded-2xl border border-[#c41e3a]/30 shadow-2xl lacquer-gloss relative group overflow-hidden">
           <div className={`absolute inset-0 bg-[#c41e3a]/5 transition-opacity ${criticalIssuesCount > 0 ? 'opacity-100' : 'opacity-0'}`}></div>
           <div className="flex items-center justify-between relative z-10">
@@ -204,7 +201,9 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
         </div>
       </div>
 
+      {/* --- PHẦN 2: CHART & RISK (ĐÃ THÊM LẠI ĐẦY ĐỦ) --- */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* 1. DONUT CHART */}
         <div className="lg:col-span-5 bg-[#1a1412] p-10 rounded-3xl border border-[#d4af37]/20 lacquer-gloss flex flex-col items-center shadow-2xl relative min-h-[500px]">
           <h3 className="heritage-font text-lg font-bold text-[#d4af37] tracking-[0.3em] mb-12 text-center uppercase border-b border-[#d4af37]/10 pb-4 w-full">Tổng quan Giao thức</h3>
           <div className="relative w-64 h-64 my-4">
@@ -214,9 +213,7 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
                   const strokeDash = `${curr.percent} ${100 - curr.percent}`;
                   const offset = 100 - acc.totalPercent;
                   acc.totalPercent += curr.percent;
-                  const circle = (
-                    <circle key={idx} cx="18" cy="18" r="15.915" fill="transparent" stroke={curr.color} strokeWidth="3" strokeDasharray={strokeDash} strokeDashoffset={offset} strokeLinecap="round" />
-                  );
+                  const circle = (<circle key={idx} cx="18" cy="18" r="15.915" fill="transparent" stroke={curr.color} strokeWidth="3" strokeDasharray={strokeDash} strokeDashoffset={offset} strokeLinecap="round" />);
                   acc.elements.push(circle);
                   return acc;
                 }, { totalPercent: 0, elements: [] as JSX.Element[] }).elements}
@@ -237,9 +234,9 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
           </div>
         </div>
 
+        {/* 2. RISK ANALYSIS */}
         <div className="lg:col-span-7 bg-[#1a1412] p-10 rounded-3xl border border-[#d4af37]/20 lacquer-gloss shadow-2xl min-h-[500px] flex flex-col">
           <h3 className="heritage-font text-lg font-bold text-[#c41e3a] tracking-[0.2em] mb-10 uppercase border-b border-[#c41e3a]/10 pb-4">Chỉ số rủi ro vận hành</h3>
-          
           <div className="grid grid-cols-2 gap-6 mb-8">
              <div className="p-4 bg-[#0d0b0a] rounded-xl border border-[#c41e3a]/20">
                <div className="flex justify-between items-start mb-2">
@@ -286,6 +283,55 @@ const ClientVisuals: React.FC<Props> = ({ tasks, issues, dateRange }) => {
           </div>
         </div>
       </div>
+
+      {/* --- PHẦN 3: BẢNG CHI TIẾT TASK (TASK MASTER) --- */}
+      <div className="bg-[#1a1412] rounded-3xl border border-[#d4af37]/20 p-8 shadow-2xl lacquer-gloss animate-in fade-in slide-in-from-bottom-8">
+         <div className="flex justify-between items-center mb-6 border-b border-[#d4af37]/10 pb-4">
+            <h3 className="heritage-font text-lg font-bold text-[#d4af37] tracking-[0.3em] uppercase">CHI TIẾT TIẾN ĐỘ (TASK MASTER)</h3>
+            <span className="code-font text-[10px] text-[#a39e93]">{filteredTasks.length} NODES</span>
+         </div>
+         <div className="overflow-x-auto rounded-xl border border-[#d4af37]/10">
+            <table className="w-full text-left text-[11px] border-collapse min-w-[1000px]">
+               <thead>
+                  <tr className="bg-[#0d0b0a] text-[#a39e93] border-b border-[#d4af37]/20">
+                     <th className="p-4 uppercase tracking-widest w-32 border-r border-[#d4af37]/10">ID (A)</th>
+                     <th className="p-4 uppercase tracking-widest border-r border-[#d4af37]/10">TÊN CÔNG VIỆC (C)</th>
+                     <th className="p-4 uppercase tracking-widest w-32 text-center border-r border-[#d4af37]/10">TRẠNG THÁI (G)</th>
+                     <th className="p-4 uppercase tracking-widest w-32 text-center border-r border-[#d4af37]/10">ƯU TIÊN (H)</th>
+                     <th className="p-4 uppercase tracking-widest w-32 text-center border-r border-[#d4af37]/10">PLAN END (K)</th>
+                     <th className="p-4 uppercase tracking-widest w-24 text-center">ĐỘ TRỄ (O)</th>
+                  </tr>
+               </thead>
+               <tbody className="bg-[#0d0b0a]/50">
+                  {filteredTasks.length === 0 ? (
+                    <tr><td colSpan={6} className="p-10 text-center italic opacity-30 code-font">Không có dữ liệu hiển thị...</td></tr>
+                  ) : filteredTasks.map(t => (
+                    <tr key={t.id} className="border-b border-[#d4af37]/5 hover:bg-[#d4af37]/5 transition-colors">
+                       <td className="p-4 code-font text-[#00f2ff] font-bold">{t.id}</td>
+                       <td className="p-4 font-bold text-[#f2ede4] italic">{t.name}</td>
+                       <td className="p-4 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-black border uppercase ${
+                             t.status.toLowerCase() === 'done' ? 'border-[#00f2ff] text-[#00f2ff] bg-[#00f2ff]/10' : 'border-[#a39e93] text-[#a39e93]'
+                          }`}>{t.status}</span>
+                       </td>
+                       <td className="p-4 text-center">
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase ${getPriorityStyle(t.priority || '')}`}>
+                             {t.priority || '-'}
+                          </span>
+                       </td>
+                       <td className="p-4 text-center code-font text-[#d4af37]">
+                          {formatDateDisplay(t.planEnd)}
+                       </td>
+                       <td className={`p-4 text-center code-font font-bold ${getSlackStyle(t.slack || '')}`}>
+                          {t.slack || '-'}
+                       </td>
+                    </tr>
+                  ))}
+               </tbody>
+            </table>
+         </div>
+      </div>
+
     </div>
   );
 };

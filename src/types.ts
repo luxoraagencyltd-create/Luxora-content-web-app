@@ -45,6 +45,7 @@ export interface Task {
   link: string;         // 05: Link | 06: Link bài đăng
   staff?: string;       // 05: Người thực hiện (Assignee)
   feedbacks: string[];
+  slack?: string;      // 05: Slack | 06: Ghi chú
   
   // Các trường chuyên biệt cho tab 06. Production
   pillar?: string;
