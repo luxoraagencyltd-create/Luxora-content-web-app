@@ -20,6 +20,7 @@ export interface User {
   password?: string;
   fullName?: string;
   projectId?: string;
+  fcmTokens?: string[]; 
 }
 
 export interface Project {
@@ -82,6 +83,7 @@ export interface ReviewMessage {
   type: 'NOTIFICATION' | 'CHAT';
   replyToId?: string; 
   taggedUserIds?: string[]; 
+  triggerKey?: string; 
 }
 
 export interface LogEntry {

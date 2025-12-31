@@ -36,6 +36,7 @@ const HUDCard = ({ label, count, color, active, onClick }: { label: string, coun
 );
 
 const App: React.FC = () => {
+  // State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [activeView, setActiveView] = useState<string>('dashboard');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
@@ -50,14 +51,19 @@ const App: React.FC = () => {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [messages, setMessages] = useState<ReviewMessage[]>([]);
   const [appConfig, setAppConfig] = useState<{googleSheetUrl: string; webAppUrl: string}>({ googleSheetUrl: '', webAppUrl: '' });
+  
+  // State Feedback Logic
   const [chatDraft, setChatDraft] = useState<string>('');
   const [pendingFeedbackTask, setPendingFeedbackTask] = useState<string | null>(null); 
   const [feedbackAccumulator, setFeedbackAccumulator] = useState<string[]>([]); 
   
+  // Refs
   const isFetchingRef = useRef(false);
   const prevTasksRef = useRef<Task[]>([]);
+
   const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
 
+  // Effects
   useEffect(() => {
     if (currentUser) {
       if (currentUser.role === 'CLIENT') {
@@ -73,7 +79,6 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!selectedProjectId) { setMessages([]); return; }
-    // Query: Lấy tin nhắn của Project, sắp xếp cũ -> mới
     const q = query(
       collection(db, 'messages'),
       where('projectId', '==', selectedProjectId),
@@ -81,7 +86,6 @@ const App: React.FC = () => {
       limit(100)
     );
 
-    // 👇 THÊM PHẦN ERROR HANDLER VÀO onSnapshot
     const unsubMessages = onSnapshot(q, 
       (snapshot) => {
         const msgs = snapshot.docs.map(doc => {
@@ -89,18 +93,15 @@ const App: React.FC = () => {
           return {
             ...data,
             id: doc.id,
-            // Convert an toàn: Nếu là Timestamp của Firebase thì đổi, không thì dùng new Date
             timestamp: data.timestamp?.toDate ? data.timestamp.toDate() : new Date(data.timestamp)
           } as ReviewMessage;
         });
         setMessages(msgs);
-        console.log("Đã tải được", msgs.length, "tin nhắn.");
       },
       (error) => {
         console.error("Lỗi tải tin nhắn:", error);
-        // 👇 QUAN TRỌNG: Nếu lỗi do thiếu Index, dòng này sẽ hiện link
         if (error.message.includes("indexes")) {
-           addLog("Hệ thống thiếu Index. Hãy mở Console (F12) để lấy link tạo Index.", "WARNING");
+           addLog("Cần tạo Index Firestore. Kiểm tra Console (F12).", "WARNING");
         }
       }
     );
@@ -137,27 +138,21 @@ const App: React.FC = () => {
   const createSystemNotification = async (taskName: string, taskId: string) => {
     if (!selectedProjectId) return;
     
-    // Tạo một "mã kiểm tra" duy nhất cho sự kiện này
-    // Ví dụ: Social-03Jan2026-01_REVIEW_ALERT
+    // Key chống duplicate
     const triggerKey = `${taskId}_REVIEW_ALERT`; 
 
     try {
-      // 1. Kiểm tra trên Firebase xem tin nhắn này đã tồn tại chưa
+      // Check trùng
       const q = query(
         collection(db, 'messages'),
         where('projectId', '==', selectedProjectId),
-        where('triggerKey', '==', triggerKey) // Tìm theo mã kiểm tra
+        where('triggerKey', '==', triggerKey)
       );
-
       const existingDocs = await getDocs(q);
 
-      // 2. Nếu đã có rồi -> Dừng lại, không gửi nữa
-      if (!existingDocs.empty) {
-        console.log(`Thông báo cho ${taskId} đã tồn tại. Bỏ qua.`);
-        return;
-      }
+      if (!existingDocs.empty) return;
 
-      // 3. Nếu chưa có -> Gửi tin nhắn mới kèm theo mã triggerKey
+      // Lưu tin nhắn hệ thống
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
         senderId: 'SYSTEM',
@@ -166,8 +161,29 @@ const App: React.FC = () => {
         text: `STATUS UPDATE: [${taskId}] ${taskName} >> REVIEW_MODE_ACTIVATED`,
         timestamp: new Date(),
         type: 'NOTIFICATION',
-        triggerKey: triggerKey // Lưu mã này để lần sau check trùng
+        triggerKey: triggerKey
       });
+
+      // Gửi Push Notification qua API
+      const clientUsers = users.filter(u => u.role === 'CLIENT' && (currentProject?.clientIds || []).includes(u.id));
+      let targetTokens: string[] = [];
+      clientUsers.forEach(u => {
+        if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
+           targetTokens = [...targetTokens, ...u.fcmTokens];
+        }
+      });
+
+      if (targetTokens.length > 0) {
+         await fetch('/api/send-fcm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+               tokens: targetTokens,
+               title: "LUXORA PROTOCOL",
+               body: `[${taskId}] ${taskName} cần bạn review!`
+            })
+         });
+      }
       
     } catch (e) {
       console.error("Lỗi gửi thông báo:", e);
@@ -196,20 +212,16 @@ const App: React.FC = () => {
         return;
       }
       
-      
       let fetchedTasks: Task[] = [];
 
-      // 👇 CẬP NHẬT ĐOẠN NÀY
       if (result.tasks05) {
         const t05 = result.tasks05.map((row: any) => {
-          // Hàm tìm giá trị thông minh (bất chấp xuống dòng, hoa thường)
           const getValue = (keywords: string[]) => {
             const key = Object.keys(row).find(k => 
               keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase()))
             );
             return key ? String(row[key]) : '';
           };
-
           return {
             id: String(getValue(['id', 'id task'])),
             projectId: selectedProjectId,
@@ -217,18 +229,10 @@ const App: React.FC = () => {
             name: getValue(['name', 'tên công việc', 'task name']),
             status: getValue(['status', 'trạng thái']) || 'To do',
             priority: getValue(['priority', 'ưu tiên']),
-            
-            // 👇 Tìm cột Plan Start (bất chấp (MM/DD/YY))
             planStart: getValue(['plan start', 'start']), 
-            
             duration: parseInt(getValue(['duration'])) || 0,
-            
-            // 👇 Tìm cột Plan End (bất chấp (MM/DD/YY))
             planEnd: getValue(['plan end', 'end']), 
-            
-            // 👇 Tìm cột Slack (Độ trễ)
             slack: getValue(['độ trễ']),
-            
             link: getValue(['link', 'link file']) || '#',
             staff: getValue(['staff', 'người thực hiện', 'assignee']),
             feedbacks: [],
@@ -364,14 +368,19 @@ const App: React.FC = () => {
             ? `/api/proxy?target=${encodeURIComponent(scriptUrl)}`
             : `/api/proxy?target=${encodeURIComponent(scriptUrl)}`;
 
-        await fetch(finalUrl, {
+        const response = await fetch(finalUrl, {
           method: 'POST',
           body: JSON.stringify({ action: 'submit_feedback', taskId: pendingFeedbackTask, feedbackContent: combinedText })
         });
-        addLog(`FEEDBACK UPLOADED. MODULE ${pendingFeedbackTask} FLAGGED FOR REVISION.`, 'SUCCESS');
+        const result = await response.json();
+        if (result.status === 'success') {
+            addLog(`FEEDBACK UPLOADED. MODULE ${pendingFeedbackTask} FLAGGED FOR REVISION.`, 'SUCCESS');
+            setPendingFeedbackTask(null);
+            setFeedbackAccumulator([]);
+        } else {
+            addLog(`SERVER ERROR: ${result.message}`, 'WARNING');
+        }
       } catch (e) { addLog('TRANSMISSION ERROR', 'WARNING'); }
-      setPendingFeedbackTask(null);
-      setFeedbackAccumulator([]);
     }
   };
 
@@ -466,46 +475,68 @@ const App: React.FC = () => {
           />
       </div>
       
-      {/* --- MAIN CONTENT WRAPPER (Thêm padding bottom cho mobile) --- */}
+      {/* --- MAIN CONTENT WRAPPER --- */}
       <div className="flex-1 flex flex-col min-w-0 md:border-l border-[#00f3ff]/20 bg-[url('/assets/grid-bg.png')] pb-20 md:pb-0">
         
         {/* HEADER RESPONSIVE */}
-        <header className="h-16 md:h-20 border-b border-[#00f3ff]/20 bg-[#050505]/90 backdrop-blur-md flex items-center justify-between px-4 md:px-8 z-20 shadow-[0_4px_30px_rgba(0,0,0,0.5)]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 md:w-12 md:h-12 rounded-sm bg-[#00f3ff]/10 flex items-center justify-center border border-[#00f3ff] shadow-[0_0_15px_rgba(0,243,255,0.3)]">
-              <i className="fa-solid fa-microchip text-[#00f3ff] text-lg md:text-2xl"></i>
+        <header className="h-auto min-h-[64px] md:h-20 border-b border-[#00f3ff]/20 bg-[#050505]/90 backdrop-blur-md flex flex-col md:flex-row items-center justify-between px-4 py-3 md:py-0 md:px-8 z-20 shadow-[0_4px_30px_rgba(0,0,0,0.5)] gap-3 md:gap-0 transition-all">
+          
+          {/* 1. Hàng trên: Logo + Nút Sync (Mobile) */}
+          <div className="flex items-center justify-between w-full md:w-auto gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 md:w-12 md:h-12 rounded-sm bg-[#00f3ff]/10 flex items-center justify-center border border-[#00f3ff] shadow-[0_0_15px_rgba(0,243,255,0.3)]">
+                <i className="fa-solid fa-microchip text-[#00f3ff] text-lg md:text-2xl"></i>
+              </div>
+              <div>
+                <h1 className="headline-font text-lg md:text-2xl font-bold text-white tracking-widest text-shadow-neon">LUXORA</h1>
+                <p className="code-font text-[8px] md:text-[10px] text-[#00f3ff] uppercase tracking-[0.2em] truncate max-w-[120px] md:max-w-none">
+                  {currentUser.fullName}
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="headline-font text-lg md:text-2xl font-bold text-white tracking-widest text-shadow-neon">LUXORA</h1>
-              <p className="code-font text-[8px] md:text-[10px] text-[#00f3ff] uppercase tracking-[0.2em] truncate max-w-[120px] md:max-w-none">
-                {currentUser.fullName} // {activeView.toUpperCase()}
-              </p>
-            </div>
+
+            {/* Nút Sync cho Mobile (Nằm góc phải trên cùng) */}
+            <button onClick={() => syncWithSheet(false)} className="md:hidden group relative px-3 py-2 bg-transparent overflow-hidden rounded-sm border border-[#00f3ff] text-[#00f3ff] hover:text-black transition-colors active:bg-[#00f3ff] active:text-black">
+              <div className="absolute inset-0 w-0 bg-[#00f3ff] transition-all duration-[250ms] ease-out group-hover:w-full"></div>
+              <span className="relative flex items-center gap-2 headline-font font-bold text-[10px] tracking-widest">
+                  <i className="fa-solid fa-rotate"></i> SYNC
+              </span>
+            </button>
           </div>
           
-          <div className="hidden md:flex items-center bg-[#0f1115] border border-[#00f3ff]/20 p-1 gap-2 hud-panel">
-             <input type="date" value={dateRange.start} onChange={e => setDateRange({...dateRange, start: e.target.value})} className="bg-transparent text-xs text-[#00f3ff] p-2 outline-none code-font cursor-pointer uppercase dark:[color-scheme:dark]"/>
+          {/* 2. Bộ lọc ngày tháng (Sửa lại để hiện trên Mobile) */}
+          {/* Xóa class 'hidden', thay bằng 'flex w-full md:w-auto' */}
+          <div className="flex items-center justify-between bg-[#0f1115] border border-[#00f3ff]/20 p-1 gap-2 hud-panel w-full md:w-auto rounded-sm">
+             <input 
+                type="date" 
+                value={dateRange.start} 
+                onChange={e => setDateRange({...dateRange, start: e.target.value})} 
+                className="bg-transparent text-xs text-[#00f3ff] p-2 outline-none code-font cursor-pointer uppercase dark:[color-scheme:dark] w-full text-center"
+             />
              <span className="text-[#00f3ff]">-</span>
-             <input type="date" value={dateRange.end} onChange={e => setDateRange({...dateRange, end: e.target.value})} className="bg-transparent text-xs text-[#00f3ff] p-2 outline-none code-font cursor-pointer uppercase dark:[color-scheme:dark]"/>
+             <input 
+                type="date" 
+                value={dateRange.end} 
+                onChange={e => setDateRange({...dateRange, end: e.target.value})} 
+                className="bg-transparent text-xs text-[#00f3ff] p-2 outline-none code-font cursor-pointer uppercase dark:[color-scheme:dark] w-full text-center"
+             />
           </div>
 
-          <button onClick={() => syncWithSheet(false)} className="group relative px-3 md:px-6 py-2 bg-transparent overflow-hidden rounded-sm border border-[#00f3ff] text-[#00f3ff] hover:text-black transition-colors">
+          {/* 3. Nút Sync cho Desktop (Giữ nguyên) */}
+          <button onClick={() => syncWithSheet(false)} className="hidden md:flex group relative px-6 py-2 bg-transparent overflow-hidden rounded-sm border border-[#00f3ff] text-[#00f3ff] hover:text-black transition-colors">
             <div className="absolute inset-0 w-0 bg-[#00f3ff] transition-all duration-[250ms] ease-out group-hover:w-full"></div>
-            <span className="relative flex items-center gap-2 headline-font font-bold text-xs md:text-sm tracking-widest">
-                <i className="fa-solid fa-rotate"></i> <span className="hidden md:inline">SYNC DATA</span>
+            <span className="relative flex items-center gap-2 headline-font font-bold text-sm tracking-widest">
+                <i className="fa-solid fa-rotate"></i> SYNC DATA
             </span>
           </button>
         </header>
 
-        {/* DASHBOARD CONTENT */}
-        {/* MAIN CONTENT */}
+        {/* MAIN CONTENT AREA */}
         <main className="flex-1 overflow-auto p-4 md:p-8 scrollbar-thin">
           {activeView === 'dashboard' ? (
-            // 👇 SỬA 1: h-full -> h-auto lg:h-full (Mobile tự dãn, Desktop full màn hình)
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 md:gap-8 h-auto lg:h-full">
               
               {/* LEFT COLUMN */}
-              {/* 👇 SỬA 2: Bỏ overflow-hidden trên mobile, chỉ dùng trên Desktop (lg:...) */}
               <div className="lg:col-span-8 space-y-4 flex flex-col h-auto lg:h-full lg:overflow-hidden">
                 
                 {/* HUD Cards */}
@@ -517,7 +548,6 @@ const App: React.FC = () => {
                 </div>
                 
                 {/* Main Table Section */}
-                {/* 👇 SỬA 3: Thêm min-h-[400px] để đảm bảo bảng luôn hiện trên điện thoại */}
                 <section className="flex-1 glass-panel p-1 flex flex-col relative rounded-sm min-h-[400px] lg:min-h-0 overflow-hidden">
                     <div className="absolute top-0 left-0 w-4 h-4 border-t border-l border-[#00f3ff]"></div>
                     <div className="absolute bottom-0 right-0 w-4 h-4 border-b border-r border-[#00f3ff]"></div>
@@ -540,7 +570,6 @@ const App: React.FC = () => {
                       </div>
                     </div>
                    
-                   {/* Container cho bảng cuộn */}
                    <div className="flex-1 overflow-auto">
                       <SheetSimulator tasks={currentTabTasks} onTaskSubmit={handleAction} currentTab={activeTab} />
                    </div>
@@ -554,7 +583,6 @@ const App: React.FC = () => {
               </div>
               
               {/* RIGHT COLUMN (CHAT) */}
-              {/* 👇 SỬA 4: Đặt chiều cao cố định (500px) trên mobile, full trên desktop */}
               <div className="lg:col-span-4 h-[500px] lg:h-full">
                   <ReviewPortal 
                     messages={messages} 
@@ -585,7 +613,7 @@ const App: React.FC = () => {
         </main>
       </div>
       
-      {/* --- MENU ĐÁY CHO MOBILE --- */}
+      {/* MOBILE MENU */}
       <MobileNavbar 
          activeView={activeView} 
          setActiveView={setActiveView} 

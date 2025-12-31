@@ -18,17 +18,18 @@ var firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 
 const messaging = firebase.messaging();
-
-// Xử lý tin nhắn khi app tắt (Background)
 messaging.onBackgroundMessage(function(payload) {
   console.log('[firebase-messaging-sw.js] Received background message ', payload);
   
   const notificationTitle = payload.notification.title;
   const notificationOptions = {
     body: payload.notification.body,
-    icon: '/assets/logo-192.png', // Đảm bảo bạn có file ảnh này
-    // icon: '/favicon.ico', // Hoặc dùng tạm favicon nếu chưa có logo
+    icon: '/assets/logo-192.png',
+    badge: '/assets/logo-192.png',
+    // Thêm tag để không bị trùng lặp thông báo
+    tag: 'luxora-notification',
+    renotify: true
   };
 
-  self.registration.showNotification(notificationTitle, notificationOptions);
+  return self.registration.showNotification(notificationTitle, notificationOptions);
 });

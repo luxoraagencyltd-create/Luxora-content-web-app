@@ -26,7 +26,6 @@ export const requestNotificationPermission = async (userId: string) => {
           fcmTokens: arrayUnion(token)
         });
         
-        alert("Đã bật thông báo thành công! FCM Token đã hiện trong Console (F12).");
         return token;
       } else {
         console.log('Không lấy được Token.');
