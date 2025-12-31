@@ -291,16 +291,33 @@ const App: React.FC = () => {
          }));
       }
 
+      // --- 👇 LOGIC TRIGGER (CẬP NHẬT) 👇 ---
       if (prevTasksRef.current.length > 0) {
         const triggeredIds = new Set();
+        
         fetchedTasks.forEach(newTask => {
             const oldTask = prevTasksRef.current.find(t => t.id === newTask.id);
-            if (oldTask && oldTask.status !== 'Review' && newTask.status === 'Review') {
-                if (!triggeredIds.has(newTask.id)) {
-                    triggeredIds.add(newTask.id);
-                    playSound();
-                    createSystemNotification(newTask.name, newTask.id);
-                    addLog(`ALERT: MODULE ${newTask.id} READY FOR REVIEW`, 'SUCCESS');
+            
+            if (oldTask) {
+                // Chuẩn hóa status để so sánh chính xác
+                const oldStatus = (oldTask.status || '').toLowerCase().trim();
+                const newStatus = (newTask.status || '').toLowerCase().trim();
+                
+                // Debug: In ra console để xem nó đọc được gì
+                // console.log(`Checking ${newTask.id}: ${oldStatus} -> ${newStatus}`);
+
+                // Điều kiện: Cũ KHÔNG PHẢI là review -> Mới LÀ review
+                // (Chấp nhận cả 'review', 'Review', 'REVIEW'...)
+                if (oldStatus !== 'review' && newStatus === 'review') {
+                    
+                    if (!triggeredIds.has(newTask.id)) {
+                        console.log("🔥 PHÁT HIỆN THAY ĐỔI: Triggering notification for", newTask.id);
+                        triggeredIds.add(newTask.id);
+                        
+                        playSound();
+                        createSystemNotification(newTask.name, newTask.id);
+                        addLog(`🔔 New Trigger: ${newTask.id} cần review!`, 'SUCCESS');
+                    }
                 }
             }
         });
@@ -308,6 +325,8 @@ const App: React.FC = () => {
 
       setTasks(fetchedTasks);
       prevTasksRef.current = fetchedTasks;
+
+
 
       if (!isSilent) addLog("DATA SYNC COMPLETE. SYSTEM UPDATED.", "SUCCESS");
     } catch (error) {
