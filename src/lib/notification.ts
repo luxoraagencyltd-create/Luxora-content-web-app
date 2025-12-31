@@ -2,34 +2,41 @@ import { getToken } from "firebase/messaging";
 import { messaging, db } from "./firebase";
 import { doc, updateDoc, arrayUnion } from "firebase/firestore";
 
+// 👇 HÃY CHẮC CHẮN BẠN ĐÃ DÁN KEY LẤY TỪ FIREBASE VÀO ĐÂY
 const VAPID_KEY = "BJu3LkoCrazLdU_SCLr5COb351-bCLXcR9KEb-Cv5N0W_uQ4Q4RE6lTkjHtznHOE_XJ5zO1jaZQVc6bjRExthHM"; 
 
 export const requestNotificationPermission = async (userId: string) => {
+  console.log("Đang bắt đầu xin quyền..."); // Log debug
+  
   try {
     const permission = await Notification.requestPermission();
     
     if (permission === 'granted') {
-      console.log('Notification permission granted.');
+      console.log('Quyền thông báo: ĐÃ CẤP. Đang lấy Token...');
       
-      // Lấy Token định danh thiết bị này
       const token = await getToken(messaging, { 
         vapidKey: VAPID_KEY 
       });
 
       if (token) {
-        console.log('FCM Token:', token);
-        // Lưu token này vào thông tin user trên Firestore
-        // Để sau này Server biết gửi thông báo cho ai
+        console.log('FCM Token:', token); // 👈 BẠN CẦN LẤY CÁI NÀY
+        
         const userRef = doc(db, "users", userId);
         await updateDoc(userRef, {
-          fcmTokens: arrayUnion(token) // Thêm token vào mảng (1 user có thể dùng nhiều thiết bị)
+          fcmTokens: arrayUnion(token)
         });
+        
+        alert("Đã bật thông báo thành công! FCM Token đã hiện trong Console (F12).");
         return token;
+      } else {
+        console.log('Không lấy được Token.');
       }
     } else {
-      console.log('Unable to get permission to notify.');
+      console.log('Quyền thông báo bị từ chối.');
+      alert("Bạn đã chặn thông báo. Hãy bấm vào biểu tượng 🔒 trên thanh địa chỉ để mở lại.");
     }
   } catch (error) {
-    console.error('Error getting token:', error);
+    console.error('Lỗi khi xin quyền:', error);
+    alert("Lỗi: " + error);
   }
 };

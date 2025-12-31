@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Project, AppConfig, UserRole } from '../types';
+import { requestNotificationPermission } from '../lib/notification';
 
 interface Props {
   view: string;
@@ -398,6 +399,26 @@ const AdminPanel: React.FC<Props> = ({ view, users, projects, onUpdateProject, o
                 <div className="mt-4 p-3 bg-[#0d0b0a] border border-[#d4af37]/10 rounded text-xs code-font max-h-48 overflow-auto whitespace-pre-wrap">{testResult}</div>
               )}
             </div>
+            {/* 👇 THÊM NÚT NÀY VÀO DƯỚI CÙNG */}
+            <div className="mt-8 pt-6 border-t border-[#d4af37]/10">
+               <h4 className="code-font text-[#00f3ff] text-xs font-bold mb-3 uppercase tracking-widest">Thiết lập thông báo đẩy (Push Notification)</h4>
+               <button 
+                  onClick={() => {
+                     // Lấy ID user hiện tại từ props hoặc context (ở đây mình giả định bạn truyền user xuống hoặc lấy từ localStorage nếu cần nhanh)
+                     // Nhưng tốt nhất là gọi hàm này từ App.tsx hoặc truyền user.id vào AdminPanel
+                     // Cách nhanh nhất để test: Gọi hàm và truyền cứng ID admin để lấy token
+                     requestNotificationPermission('admin'); 
+                  }}
+                  className="flex items-center gap-2 px-4 py-3 bg-[#c41e3a]/10 border border-[#c41e3a] text-[#c41e3a] rounded hover:bg-[#c41e3a] hover:text-white transition-all code-font text-xs font-bold uppercase"
+               >
+                  <i className="fa-solid fa-bell"></i>
+                  Kích hoạt thông báo trên thiết bị này
+               </button>
+               <p className="text-[9px] text-[#a39e93] mt-2 italic">
+                  * Nhấn nút này để cấp quyền nhận thông báo khi tắt App. Sau khi nhấn, hãy kiểm tra Console (F12) để lấy Token.
+               </p>
+            </div>
+
           </div>
         );
       default:
