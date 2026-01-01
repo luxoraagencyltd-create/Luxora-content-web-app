@@ -14,6 +14,8 @@ import IssueLog from './components/IssueLog';
 import PWAPrompt from './components/PWAPrompt';
 import MobileNavbar from './components/MobileNavbar';
 import { requestNotificationPermission } from './lib/notification'; 
+import { onMessage } from "firebase/messaging";
+import { messaging } from "./lib/firebase";
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFTCYBBwC2s0Cu0KQkAjnJ15P9FmQx68orggfKhUtRMiA-VP2EaXWfruOCTfEmXdDUkQ/exec";
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
@@ -114,6 +116,30 @@ const App: React.FC = () => {
     const interval = setInterval(() => { syncWithSheet(true); }, 15000); 
     return () => clearInterval(interval);
   }, [selectedProjectId]); 
+
+  useEffect(() => {
+    // Lắng nghe tin nhắn khi App đang mở (Foreground)
+    const unsubscribe = onMessage(messaging, (payload) => {
+      console.log('Foreground Message:', payload);
+      
+      // Tự tạo Notification của trình duyệt
+      const title = payload.notification?.title || "Luxora Notification";
+      const options = {
+        body: payload.notification?.body,
+        icon: "/assets/pwa-192x192.png",
+      };
+
+      // Kiểm tra quyền và hiển thị
+      if (Notification.permission === "granted") {
+         new Notification(title, options);
+      }
+      
+      // Phát âm thanh
+      playSound();
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const playSound = () => { try { new Audio(NOTIFICATION_SOUND).play().catch(() => {}); } catch (e) {} };
 
