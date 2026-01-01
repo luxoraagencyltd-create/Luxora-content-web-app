@@ -110,7 +110,7 @@ export default Sidebar;
 const LogoImage: React.FC = () => {
   const [failed, setFailed] = React.useState(false);
   if (!failed) {
-    return <img src="/assets/logo-48.png" alt="Luxora" className="w-8 h-8 object-contain" onError={() => setFailed(true)} />;
+    return <img src="/assets/pwa-192x192.png" alt="Luxora" className="w-8 h-8 object-contain" onError={() => setFailed(true)} />;
   }
   return (
     <svg width="32" height="32" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-8 h-8">
