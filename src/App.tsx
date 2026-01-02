@@ -14,7 +14,7 @@ import IssueLog from './components/IssueLog';
 import PWAPrompt from './components/PWAPrompt';
 import MobileNavbar from './components/MobileNavbar';
 import { requestNotificationPermission } from './lib/notification'; 
-import { onMessage } from "firebase/messaging";
+import { getMessaging, onMessage } from "firebase/messaging";
 import { messaging } from "./lib/firebase";
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFTCYBBwC2s0Cu0KQkAjnJ15P9FmQx68orggfKhUtRMiA-VP2EaXWfruOCTfEmXdDUkQ/exec";
@@ -141,6 +141,31 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const messaging = getMessaging();
+    const unsubscribe = onMessage(messaging, (payload) => {
+      console.log('🔔 Nhận tin nhắn khi đang mở App:', payload);
+      
+      const { title, body } = payload.notification || {};
+      
+      // Ép trình duyệt hiện thông báo hệ thống
+      if (Notification.permission === "granted" && title) {
+        new Notification(title, {
+          body: body,
+          icon: '/assets/logo-192.png'
+        });
+      }
+      
+      // Phát âm thanh
+      playSound();
+      
+      // Cập nhật lại list tin nhắn (để hiện chấm đỏ nếu cần)
+      // (Logic onSnapshot ở dưới sẽ tự lo việc hiển thị vào khung chat)
+    });
+
+    return () => unsubscribe();
+  }, []);
+
   const playSound = () => { try { new Audio(NOTIFICATION_SOUND).play().catch(() => {}); } catch (e) {} };
 
   const parseDate = (dStr: string) => {
@@ -164,21 +189,22 @@ const App: React.FC = () => {
   const createSystemNotification = async (taskName: string, taskId: string) => {
     if (!selectedProjectId) return;
     
-    // Key chống duplicate
     const triggerKey = `${taskId}_REVIEW_ALERT`; 
 
     try {
-      // Check trùng
+      // 1. Check trùng (Giữ nguyên)
       const q = query(
         collection(db, 'messages'),
         where('projectId', '==', selectedProjectId),
         where('triggerKey', '==', triggerKey)
       );
       const existingDocs = await getDocs(q);
+      if (!existingDocs.empty) {
+          console.log("⚠️ Đã báo rồi, không báo lại.");
+          return;
+      }
 
-      if (!existingDocs.empty) return;
-
-      // Lưu tin nhắn hệ thống
+      // 2. Lưu thông báo vào hệ thống (Giữ nguyên)
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
         senderId: 'SYSTEM',
@@ -190,25 +216,45 @@ const App: React.FC = () => {
         triggerKey: triggerKey
       });
 
-      // Gửi Push Notification qua API
-      const clientUsers = users.filter(u => u.role === 'CLIENT' && (currentProject?.clientIds || []).includes(u.id));
+      // 3. LỌC NGƯỜI NHẬN (SỬA ĐOẠN NÀY ĐỂ TEST)
+      // Lấy hết: Admin, Staff, Client của dự án này
+      const targetUsers = users.filter(u => 
+        u.role === 'ADMIN' || 
+        (currentProject?.clientIds || []).includes(u.id) ||
+        (currentProject?.staffIds || []).includes(u.id)
+      );
+
+      console.log(`🔍 Tìm thấy ${targetUsers.length} người nhận (Admin/Staff/Client).`);
+      
       let targetTokens: string[] = [];
-      clientUsers.forEach(u => {
+      targetUsers.forEach(u => {
         if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
+           // Log ra để biết user nào đã có token
+           console.log(`✅ User ${u.username} có ${u.fcmTokens.length} tokens.`);
            targetTokens = [...targetTokens, ...u.fcmTokens];
+        } else {
+           console.log(`❌ User ${u.username} CHƯA CÓ Token.`);
         }
       });
 
+      // 4. GỬI
       if (targetTokens.length > 0) {
-         await fetch('/api/send-fcm', {
+         console.log(`🚀 Đang bắn thông báo tới ${targetTokens.length} thiết bị...`);
+         const res = await fetch('/api/send-fcm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                tokens: targetTokens,
                title: "LUXORA PROTOCOL",
-               body: `[${taskId}] ${taskName} cần bạn review!`
+               body: `[${taskId}] ${taskName} cần review!`
             })
          });
+         const data = await res.json();
+         console.log("✅ Kết quả Server trả về:", data);
+         addLog(`Đã gửi Push Notification thành công!`, 'SUCCESS');
+      } else {
+         console.log("⚠️ Không tìm thấy Token nào hợp lệ.");
+         addLog("Không có thiết bị nào đã bật thông báo.", "WARNING");
       }
       
     } catch (e) {
