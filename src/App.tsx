@@ -39,7 +39,25 @@ const HUDCard = ({ label, count, color, active, onClick }: { label: string, coun
 
 const App: React.FC = () => {
   // State
-  const [currentUser, setCurrentUser] = useState<User | null>(null);
+  // 1. Khởi tạo state từ LocalStorage (để F5 hoặc tắt đi bật lại vẫn còn)
+  const [currentUser, setCurrentUser] = useState<User | null>(() => {
+    const savedUser = localStorage.getItem('luxora_user');
+    return savedUser ? JSON.parse(savedUser) : null;
+  });
+
+  // 2. Mỗi khi currentUser thay đổi -> Lưu ngay vào LocalStorage
+  useEffect(() => {
+    if (currentUser) {
+      localStorage.setItem('luxora_user', JSON.stringify(currentUser));
+      
+      // Tiện thể xin quyền lại (để update token nếu token cũ hết hạn)
+      if ('serviceWorker' in navigator) {
+         requestNotificationPermission(currentUser.id);
+      }
+    } else {
+      localStorage.removeItem('luxora_user');
+    }
+  }, [currentUser]);
   const [activeView, setActiveView] = useState<string>('dashboard');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -427,6 +445,12 @@ const App: React.FC = () => {
   const handleCreateUser = async (u: User) => await setDoc(doc(db, 'users', u.id), u);
   const handleDeleteUser = async (uid: string) => await deleteDoc(doc(db, 'users', uid));
   const handleUpdateConfig = async (c: any) => await setDoc(doc(db, 'config', 'app'), c);
+  const handleLogout = () => {
+      setCurrentUser(null);
+      setSelectedProjectId(null);
+      localStorage.removeItem('luxora_user'); // QUAN TRỌNG: Xóa bộ nhớ để không tự đăng nhập lại
+      setActiveView('dashboard'); // Reset về trang chủ
+  };
 
   const handleAction = async (action: string, taskId: string) => {
     if (action === 'approve') {
@@ -564,8 +588,9 @@ const App: React.FC = () => {
              activeView={activeView} 
              setActiveView={setActiveView} 
              userRole={currentUser.role} 
-             onLogout={() => { setCurrentUser(null); setSelectedProjectId(null); }} 
+             onLogout={handleLogout} 
              onSwitchProject={() => setSelectedProjectId(null)} 
+             currentUser={currentUser}
           />
       </div>
       
@@ -713,7 +738,7 @@ const App: React.FC = () => {
          setActiveView={setActiveView} 
          userRole={currentUser.role} 
          currentUser={currentUser}
-         onLogout={() => { setCurrentUser(null); setSelectedProjectId(null); }}
+         onLogout={handleLogout}         
          onSwitchProject={() => setSelectedProjectId(null)}
          project={currentProject}
       />
