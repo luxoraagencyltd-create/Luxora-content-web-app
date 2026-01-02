@@ -258,28 +258,45 @@ const App: React.FC = () => {
         }
       });
 
-      // 4. GỬI
+      
+      // 4. GỬI (ĐOẠN CODE ĐÃ SỬA ĐỂ BẮT LỖI SERVER)
       if (targetTokens.length > 0) {
          console.log(`🚀 Đang bắn thông báo tới ${targetTokens.length} thiết bị...`);
-         const res = await fetch('/api/send-fcm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-               tokens: targetTokens,
-               title: "LUXORA PROTOCOL",
-               body: `[${taskId}] ${taskName} cần review!`
-            })
-         });
-         const data = await res.json();
-         console.log("✅ Kết quả Server trả về:", data);
-         addLog(`Đã gửi Push Notification thành công!`, 'SUCCESS');
+         
+         try {
+           const res = await fetch('/api/send-fcm', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                 tokens: targetTokens,
+                 title: "LUXORA PROTOCOL",
+                 body: `[${taskId}] ${taskName} cần review!`
+              })
+           });
+
+           // 👇 KIỂM TRA KẾT QUẢ TRƯỚC KHI ĐỌC JSON
+           if (!res.ok) {
+              // Nếu Server lỗi (500), đọc dạng text để xem lỗi gì
+              const errorText = await res.text();
+              console.error("❌ Lỗi từ Server Vercel:", errorText);
+              addLog(`Lỗi Server khi gửi Noti: ${res.status}`, "WARNING");
+           } else {
+              // Nếu Server ổn (200), mới đọc JSON
+              const data = await res.json();
+              console.log("✅ Kết quả Server trả về:", data);
+              addLog(`Đã gửi Push Notification: ${data.sent} thành công`, 'SUCCESS');
+           }
+         } catch (fetchError) {
+            console.error("Lỗi kết nối mạng:", fetchError);
+         }
+
       } else {
          console.log("⚠️ Không tìm thấy Token nào hợp lệ.");
          addLog("Không có thiết bị nào đã bật thông báo.", "WARNING");
       }
       
     } catch (e) {
-      console.error("Lỗi gửi thông báo:", e);
+      console.error("Lỗi logic hàm thông báo:", e);
     }
   };
 
