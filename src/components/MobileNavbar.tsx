@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { User, Project } from '../types';
+// 👇 1. IMPORT HÀM XIN QUYỀN
+import { requestNotificationPermission } from '../lib/notification';
 
 interface Props {
   activeView: string;
@@ -11,7 +13,7 @@ interface Props {
   project?: Project;
 }
 
-const MobileNavbar: React.FC<Props> = ({ activeView, setActiveView, userRole, onLogout, onSwitchProject }) => {
+const MobileNavbar: React.FC<Props> = ({ activeView, setActiveView, userRole, currentUser, onLogout, onSwitchProject }) => {
   const isClient = userRole === 'CLIENT';
   const isAdmin = userRole === 'ADMIN';
   
@@ -20,6 +22,14 @@ const MobileNavbar: React.FC<Props> = ({ activeView, setActiveView, userRole, on
   const handleNavClick = (id: string) => {
     setActiveView(id);
     setIsMenuOpen(false);
+  };
+
+  // 👇 HÀM XỬ LÝ BẬT NOTI
+  const handleEnableNoti = async () => {
+    if (currentUser) {
+        await requestNotificationPermission(currentUser.id);
+        setIsMenuOpen(false);
+    }
   };
 
   const NavItem = ({ id, icon, label, onClick }: { id: string, icon: string, label?: string, onClick?: () => void }) => {
@@ -37,8 +47,6 @@ const MobileNavbar: React.FC<Props> = ({ activeView, setActiveView, userRole, on
 
   return (
     <>
-      {/* 1. LỚP PHỦ OVERLAY (Chỉ hiện khi Menu mở) */}
-      {/* Bấm vào lớp này sẽ đóng Menu ngay lập tức */}
       {isMenuOpen && (
         <div 
           className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[95] animate-in fade-in duration-200"
@@ -46,7 +54,6 @@ const MobileNavbar: React.FC<Props> = ({ activeView, setActiveView, userRole, on
         ></div>
       )}
 
-      {/* 2. THANH NAVBAR CHÍNH (Z-Index cao hơn Overlay) */}
       <div className="md:hidden fixed bottom-0 left-0 w-full h-16 bg-[#050505] border-t border-[#00f3ff]/30 z-[100] flex justify-between items-center px-2 pb-safe shadow-[0_-5px_20px_rgba(0,0,0,1)]">
         
         <NavItem id="dashboard" icon="fa-layer-group" label="Dash" />
@@ -55,23 +62,19 @@ const MobileNavbar: React.FC<Props> = ({ activeView, setActiveView, userRole, on
         {isClient && <NavItem id="visuals" icon="fa-chart-pie" label="Stats" />}
         {isAdmin && <NavItem id="manage-users" icon="fa-users-gear" label="Users" />}
 
-        {/* 3. NÚT MENU MỞ RỘNG */}
         <div className="relative flex-1 flex justify-center">
            <button 
-              // Dùng onTouchEnd để ưu tiên cho Mobile, hoặc onClick cũng được vì đã có Overlay xử lý
               onClick={(e) => {
-                 e.stopPropagation(); // Ngăn sự kiện nổi bọt
+                 e.stopPropagation();
                  setIsMenuOpen(!isMenuOpen);
               }} 
               className={`flex flex-col items-center justify-center p-2 transition-transform active:scale-90 ${isMenuOpen ? 'text-[#c41e3a]' : 'text-[#a39e93]'}`}
            >
-              {/* Đổi icon khi đóng/mở */}
               <i className={`fa-solid ${isMenuOpen ? 'fa-xmark' : 'fa-bars'} text-xl`}></i>
            </button>
            
-           {/* 4. POPUP MENU (Nằm tuyệt đối so với nút) */}
            {isMenuOpen && (
-             <div className="absolute bottom-full right-2 mb-4 w-56 bg-[#1a1412] border border-[#c41e3a]/30 rounded-lg shadow-[0_0_30px_rgba(0,0,0,1)] p-1 animate-in slide-in-from-bottom-5 fade-in duration-200 z-[101]">
+             <div className="absolute bottom-full right-2 mb-4 w-60 bg-[#1a1412] border border-[#c41e3a]/30 rounded-lg shadow-[0_0_30px_rgba(0,0,0,1)] p-1 animate-in slide-in-from-bottom-5 fade-in duration-200 z-[101]">
                 
                 {isAdmin && (
                   <>
@@ -83,6 +86,11 @@ const MobileNavbar: React.FC<Props> = ({ activeView, setActiveView, userRole, on
                     </button>
                   </>
                 )}
+
+                {/* 👇 NÚT BẬT THÔNG BÁO CHO CLIENT */}
+                <button onClick={handleEnableNoti} className="w-full text-left px-4 py-3 text-[11px] code-font text-[#00f3ff] hover:bg-[#00f3ff]/10 flex items-center gap-3 border-b border-[#ffffff]/5 active:bg-[#00f3ff]/20">
+                   <i className="fa-solid fa-bell animate-swing"></i> Bật Thông Báo
+                </button>
 
                 <button onClick={() => { onSwitchProject(); setIsMenuOpen(false); }} className="w-full text-left px-4 py-3 text-[11px] code-font text-[#f2ede4] hover:bg-[#d4af37]/10 flex items-center gap-3 border-b border-[#ffffff]/5 active:bg-[#d4af37]/20">
                    <i className="fa-solid fa-repeat text-[#d4af37]"></i> Đổi Dự Án

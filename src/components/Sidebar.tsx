@@ -1,6 +1,6 @@
-
 import React from 'react';
-import { Project, UserRole } from '../types';
+import { Project, User, UserRole } from '../types';
+import { requestNotificationPermission } from '../lib/notification'; 
 
 interface Props {
   onSettingsClick?: () => void;
@@ -11,20 +11,33 @@ interface Props {
   userRole?: UserRole;
   onSwitchProject?: () => void;
   unreadMessages?: number;
+  currentUser?: User | null; // 👇 Đã thêm prop này
 }
 
-const Sidebar: React.FC<Props> = ({ onSettingsClick: _onSettingsClick, currentProject, onLogout, activeView, setActiveView, userRole, onSwitchProject, unreadMessages = 0 }) => {
+const Sidebar: React.FC<Props> = ({ 
+  onSettingsClick: _onSettingsClick, 
+  currentProject, 
+  onLogout, 
+  activeView, 
+  setActiveView, 
+  userRole, 
+  onSwitchProject, 
+  unreadMessages = 0,
+  currentUser 
+}) => {
   const isAdmin = userRole === 'ADMIN';
   const isClient = userRole === 'CLIENT';
 
   return (
-    <aside className="w-20 lg:w-64 bg-[#0d0b0a] h-full flex flex-col flex-shrink-0 transition-all duration-300 border-r border-[#1a1412] z-30">
+    <aside className="w-20 lg:w-64 bg-[#0d0b0a] h-full flex flex-col flex-shrink-0 transition-all duration-300 border-r border-[#1a1412] z-30 shadow-[5px_0_30px_rgba(0,0,0,0.5)]">
+      {/* HEADER LOGO */}
       <div className="p-8 flex items-center justify-center lg:justify-start gap-3">
         <LogoImage />
         <span className="hidden lg:block heritage-font font-bold text-[#d4af37] text-xl">Luxora {isAdmin ? 'Admin' : 'Portal'}</span>
       </div>
       
-      <nav className="flex-1 mt-6 px-4 space-y-2 overflow-y-auto">
+      {/* MENU ITEMS */}
+      <nav className="flex-1 mt-6 px-4 space-y-2 overflow-y-auto scrollbar-hide">
         {!isAdmin && (
           <>
             <div onClick={() => setActiveView('dashboard')} className="relative">
@@ -80,11 +93,21 @@ const Sidebar: React.FC<Props> = ({ onSettingsClick: _onSettingsClick, currentPr
         
         <div className="pt-2 flex-1"></div>
 
+        {/* 👇 NÚT BẬT THÔNG BÁO (Dành cho Desktop/Laptop) */}
+        <div 
+           onClick={() => currentUser && requestNotificationPermission(currentUser.id)}
+           className="cursor-pointer mb-2 flex items-center gap-4 px-4 py-3 rounded-lg text-[#00f3ff] hover:bg-[#00f3ff]/10 transition-all border border-transparent hover:border-[#00f3ff]/30 group"
+        >
+           <i className="fa-solid fa-bell text-lg w-6 text-center group-hover:animate-swing"></i>
+           <span className="hidden lg:block font-medium text-xs code-font uppercase tracking-wider">Bật Thông Báo</span>
+        </div>
+
         <div onClick={onLogout} className="cursor-pointer mb-6">
           <NavItem icon="fa-power-off" label="Đăng Xuất" isDanger />
         </div>
       </nav>
       
+      {/* FOOTER INFO */}
       {!isAdmin && currentProject && (
         <div className="p-4 bg-[#1a1412] m-4 rounded-xl hidden lg:block border border-[#d4af37]/20 lacquer-gloss">
           <p className="code-font text-[9px] text-[#a39e93] uppercase font-bold tracking-[0.2em] mb-2">PROJECT NODE</p>
@@ -95,6 +118,7 @@ const Sidebar: React.FC<Props> = ({ onSettingsClick: _onSettingsClick, currentPr
   );
 };
 
+// Component NavItem nhỏ
 const NavItem = ({ icon, label, active = false, isDanger = false }: { icon: string, label: string, active?: boolean, isDanger?: boolean }) => (
   <div className={`flex items-center gap-4 px-4 py-3 rounded-lg cursor-pointer transition-all border border-transparent ${
     active ? 'bg-[#d4af37]/10 border-[#d4af37]/30 text-[#d4af37] shadow-[inset_0_0_15px_rgba(212,175,55,0.05)]' : 
@@ -107,6 +131,7 @@ const NavItem = ({ icon, label, active = false, isDanger = false }: { icon: stri
 
 export default Sidebar;
 
+// Component Logo
 const LogoImage: React.FC = () => {
   const [failed, setFailed] = React.useState(false);
   if (!failed) {

@@ -217,14 +217,17 @@ const App: React.FC = () => {
       });
 
       // 3. LỌC NGƯỜI NHẬN (SỬA ĐOẠN NÀY ĐỂ TEST)
-      // Lấy hết: Admin, Staff, Client của dự án này
       const targetUsers = users.filter(u => 
+        // Gửi cho Admin
         u.role === 'ADMIN' || 
-        (currentProject?.clientIds || []).includes(u.id) ||
-        (currentProject?.staffIds || []).includes(u.id)
+        // Gửi cho Staff
+        u.role === 'STAFF' ||
+        // Gửi cho Client (Kiểm tra kỹ logic này)
+        (u.role === 'CLIENT' && (currentProject?.clientIds || []).includes(u.id))
       );
 
-      console.log(`🔍 Tìm thấy ${targetUsers.length} người nhận (Admin/Staff/Client).`);
+      // DEBUG: In ra danh sách người sẽ nhận để kiểm tra
+      console.log("Danh sách người nhận:", targetUsers.map(u => u.username));
       
       let targetTokens: string[] = [];
       targetUsers.forEach(u => {
