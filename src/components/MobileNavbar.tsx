@@ -28,7 +28,7 @@ const MobileNavbar: React.FC<Props> = ({ activeView, setActiveView, userRole, cu
   const handleEnableNoti = async () => {
     if (currentUser) {
         await requestNotificationPermission(currentUser.id);
-        setIsMenuOpen(false);
+        setIsMenuOpen(false); // Đóng menu sau khi bấm
     }
   };
 
@@ -87,7 +87,7 @@ const MobileNavbar: React.FC<Props> = ({ activeView, setActiveView, userRole, cu
                   </>
                 )}
 
-                {/* 👇 NÚT BẬT THÔNG BÁO CHO CLIENT */}
+                {/* 👇 NÚT BẬT THÔNG BÁO CHO CLIENT (Nằm ở đây) */}
                 <button onClick={handleEnableNoti} className="w-full text-left px-4 py-3 text-[11px] code-font text-[#00f3ff] hover:bg-[#00f3ff]/10 flex items-center gap-3 border-b border-[#ffffff]/5 active:bg-[#00f3ff]/20">
                    <i className="fa-solid fa-bell animate-swing"></i> Bật Thông Báo
                 </button>

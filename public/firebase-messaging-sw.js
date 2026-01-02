@@ -1,8 +1,9 @@
 /* eslint-disable no-undef */
-importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js');
-importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js');
+importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js');
 
-var firebaseConfig = {
+// 1. Cấu hình cứng (Dùng đúng thông tin từ Console)
+const firebaseConfig = {
   apiKey: "AIzaSyC0r5R2WiU_VdHDfiV3hJwJuef7JOOegoo",
   authDomain: "luxora-content-app.firebaseapp.com",
   projectId: "luxora-content-app",
@@ -13,40 +14,39 @@ var firebaseConfig = {
 };
 
 firebase.initializeApp(firebaseConfig);
-
 const messaging = firebase.messaging();
 
-// Thiết lập xử lý khi nhận tin nhắn lúc TẮT APP
+// 2. Xử lý tin nhắn nền (Background)
 messaging.onBackgroundMessage(function(payload) {
-  console.log('[SW] Received background message ', payload);
-  
-  // Lấy tiêu đề và nội dung
+  console.log('[SW] Nhận tin nhắn nền:', payload);
+
   const notificationTitle = payload.notification.title;
   const notificationOptions = {
     body: payload.notification.body,
-    // Dùng location.origin để lấy đường dẫn tuyệt đối, tránh lỗi 404
-    icon: self.location.origin + '/assets/pwa-192x192.png', 
-    badge: self.location.origin + '/assets/pwa-192x192.png',
-    tag: 'luxora-alert', // Gom nhóm thông báo
-    renotify: true, // Rung lại nếu có tin mới cùng tag
-    data: payload.data // Truyền dữ liệu để click vào mở app
+    // Icon dùng đường dẫn tương đối, trình duyệt tự hiểu
+    icon: '/assets/logo-192.png', 
+    badge: '/assets/logo-192.png',
+    tag: 'luxora-notification',
+    data: payload.data
   };
 
   return self.registration.showNotification(notificationTitle, notificationOptions);
 });
 
-// Xử lý khi người dùng bấm vào thông báo
+// 3. Xử lý khi bấm vào thông báo
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-  // Mở App ra khi bấm vào
+  // Mở lại cửa sổ app
   event.waitUntil(
-    clients.matchAll({type: 'window'}).then( function(windowClients) {
-      for (var i = 0; i < windowClients.length; i++) {
-        var client = windowClients[i];
-        if (client.url === '/' && 'focus' in client) {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
+      // Nếu app đang mở sẵn thì focus vào
+      for (var i = 0; i < clientList.length; i++) {
+        var client = clientList[i];
+        if (client.url.indexOf('/') !== -1 && 'focus' in client) {
           return client.focus();
         }
       }
+      // Nếu chưa mở thì mở mới
       if (clients.openWindow) {
         return clients.openWindow('/');
       }
