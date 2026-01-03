@@ -16,6 +16,7 @@ import MobileNavbar from './components/MobileNavbar';
 import { requestNotificationPermission } from './lib/notification'; 
 import { getMessaging, onMessage } from "firebase/messaging";
 import { messaging } from "./lib/firebase";
+import { SDK_VERSION } from "firebase/app";
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFTCYBBwC2s0Cu0KQkAjnJ15P9FmQx68orggfKhUtRMiA-VP2EaXWfruOCTfEmXdDUkQ/exec";
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
@@ -38,6 +39,7 @@ const HUDCard = ({ label, count, color, active, onClick }: { label: string, coun
 );
 
 const App: React.FC = () => {
+  console.log("🔥 Firebase Client Version:", SDK_VERSION);
   // State
   // 1. Khởi tạo state từ LocalStorage (để F5 hoặc tắt đi bật lại vẫn còn)
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
