@@ -1,9 +1,9 @@
 /* eslint-disable no-undef */
-importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js');
-importScripts('https://www.gstatic.com/firebasejs/9.22.0/firebase-messaging-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js');
+importScripts('https://www.gstatic.com/firebasejs/8.10.1/firebase-messaging.js');
 
-// 1. Cấu hình cứng (Dùng đúng thông tin từ Console)
-const firebaseConfig = {
+var firebaseConfig = {
+  // Thay đúng config dự án của bạn vào đây
   apiKey: "AIzaSyC0r5R2WiU_VdHDfiV3hJwJuef7JOOegoo",
   authDomain: "luxora-content-app.firebaseapp.com",
   projectId: "luxora-content-app",
@@ -16,40 +16,17 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// 2. Xử lý tin nhắn nền (Background)
 messaging.onBackgroundMessage(function(payload) {
-  console.log('[SW] Nhận tin nhắn nền:', payload);
-
+  console.log('[SW] Nhận tin nền:', payload);
+  
   const notificationTitle = payload.notification.title;
   const notificationOptions = {
     body: payload.notification.body,
-    // Icon dùng đường dẫn tương đối, trình duyệt tự hiểu
-    icon: '/assets/logo-192.png', 
+    icon: '/assets/logo-192.png', // Đảm bảo file này tồn tại trong folder public/assets
     badge: '/assets/logo-192.png',
-    tag: 'luxora-notification',
-    data: payload.data
+    data: payload.data,
+    requireInteraction: true // Bắt buộc người dùng bấm tắt mới ẩn
   };
 
   return self.registration.showNotification(notificationTitle, notificationOptions);
-});
-
-// 3. Xử lý khi bấm vào thông báo
-self.addEventListener('notificationclick', function(event) {
-  event.notification.close();
-  // Mở lại cửa sổ app
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
-      // Nếu app đang mở sẵn thì focus vào
-      for (var i = 0; i < clientList.length; i++) {
-        var client = clientList[i];
-        if (client.url.indexOf('/') !== -1 && 'focus' in client) {
-          return client.focus();
-        }
-      }
-      // Nếu chưa mở thì mở mới
-      if (clients.openWindow) {
-        return clients.openWindow('/');
-      }
-    })
-  );
 });

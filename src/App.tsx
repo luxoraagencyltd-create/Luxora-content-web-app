@@ -161,6 +161,36 @@ const App: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  // --- LẮNG NGHE NOTI KHI ĐANG MỞ APP (FOREGROUND) ---
+  useEffect(() => {
+    try {
+      // Import động để tránh lỗi build nếu môi trường không hỗ trợ
+      import('firebase/messaging').then(({ getMessaging, onMessage }) => {
+        const messaging = getMessaging();
+        
+        onMessage(messaging, (payload) => {
+          console.log('🔔 Nhận tin nhắn Foreground:', payload);
+          
+          const { title, body } = payload.notification || {};
+          
+          // 1. Phát âm thanh
+          playSound();
+          
+          // 2. Ép hiển thị Popup hệ thống (Góc màn hình)
+          if (Notification.permission === "granted" && title) {
+            new Notification(title, {
+              body: body,
+              icon: '/assets/logo-192.png',
+              tag: 'luxora-alert' // Để không bị spam nhiều thông báo chồng nhau
+            });
+          }
+        });
+      });
+    } catch (err) {
+      console.log("Messaging not supported on this browser.");
+    }
+  }, []);
+  
   useEffect(() => {
     try {
       const messaging = getMessaging();
