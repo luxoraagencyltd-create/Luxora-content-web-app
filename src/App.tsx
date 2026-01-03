@@ -160,28 +160,31 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const messaging = getMessaging();
-    const unsubscribe = onMessage(messaging, (payload) => {
-      console.log('🔔 Nhận tin nhắn khi đang mở App:', payload);
-      
-      const { title, body } = payload.notification || {};
-      
-      // Ép trình duyệt hiện thông báo hệ thống
-      if (Notification.permission === "granted" && title) {
-        new Notification(title, {
-          body: body,
-          icon: '/assets/logo-192.png'
-        });
-      }
-      
-      // Phát âm thanh
-      playSound();
-      
-      // Cập nhật lại list tin nhắn (để hiện chấm đỏ nếu cần)
-      // (Logic onSnapshot ở dưới sẽ tự lo việc hiển thị vào khung chat)
-    });
+    try {
+      const messaging = getMessaging();
+      const unsubscribe = onMessage(messaging, (payload) => {
+        console.log('🔔 Nhận tin nhắn Foreground:', payload);
+        
+        const { title, body, icon } = payload.notification || {};
+        
+        // Phát âm thanh
+        playSound();
 
-    return () => unsubscribe();
+        // ÉP HIỂN THỊ POPUP CỦA TRÌNH DUYỆT
+        if (Notification.permission === "granted") {
+           // Tạo thông báo hệ thống (Góc màn hình)
+           new Notification(title || "Luxora Notification", {
+             body: body,
+             icon: icon || '/assets/logo-192.png',
+             // Tag này giúp thông báo không bị chồng lên nhau
+             tag: 'luxora-alert'
+           });
+        }
+      });
+      return () => unsubscribe();
+    } catch (err) {
+      console.log("Messaging không hỗ trợ trên trình duyệt này hoặc chưa init.");
+    }
   }, []);
 
   const playSound = () => { try { new Audio(NOTIFICATION_SOUND).play().catch(() => {}); } catch (e) {} };
@@ -205,24 +208,32 @@ const App: React.FC = () => {
   }, [selectedProjectId]);
 
   const createSystemNotification = async (taskName: string, taskId: string) => {
-    if (!selectedProjectId) return;
+    console.log(`🚀 [DEBUG] Bắt đầu quy trình thông báo cho task: ${taskId}`); // 1. Bắt đầu
+    
+    if (!selectedProjectId) {
+        console.log("❌ [DEBUG] Không có Project ID nào được chọn.");
+        return;
+    }
     
     const triggerKey = `${taskId}_REVIEW_ALERT`; 
 
     try {
-      // 1. Check trùng (Giữ nguyên)
+      // Check trùng
       const q = query(
         collection(db, 'messages'),
         where('projectId', '==', selectedProjectId),
         where('triggerKey', '==', triggerKey)
       );
       const existingDocs = await getDocs(q);
+
       if (!existingDocs.empty) {
-          console.log("⚠️ Đã báo rồi, không báo lại.");
+          console.log("⚠️ [DEBUG] Dừng lại: Thông báo này ĐÃ TỒN TẠI trên hệ thống.");
           return;
       }
 
-      // 2. Lưu thông báo vào hệ thống (Giữ nguyên)
+      console.log("✅ [DEBUG] Chưa báo lần nào. Tiến hành tạo thông báo...");
+
+      // Lưu tin nhắn
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
         senderId: 'SYSTEM',
@@ -234,69 +245,62 @@ const App: React.FC = () => {
         triggerKey: triggerKey
       });
 
-      // 3. LỌC NGƯỜI NHẬN (SỬA ĐOẠN NÀY ĐỂ TEST)
+      // LỌC NGƯỜI NHẬN (Lấy tất cả để test)
+      console.log("🔍 [DEBUG] Đang tìm người nhận...");
+      console.log("   - Tổng user trong hệ thống:", users.length);
+      console.log("   - Staff trong dự án:", currentProject?.staffIds);
+      console.log("   - Client trong dự án:", currentProject?.clientIds);
+
       const targetUsers = users.filter(u => 
-        // Gửi cho Admin
         u.role === 'ADMIN' || 
-        // Gửi cho Staff
-        u.role === 'STAFF' ||
-        // Gửi cho Client (Kiểm tra kỹ logic này)
-        (u.role === 'CLIENT' && (currentProject?.clientIds || []).includes(u.id))
+        (currentProject?.clientIds || []).includes(u.id) ||
+        (currentProject?.staffIds || []).includes(u.id)
       );
 
-      // DEBUG: In ra danh sách người sẽ nhận để kiểm tra
-      console.log("Danh sách người nhận:", targetUsers.map(u => u.username));
+      console.log(`✅ [DEBUG] Tìm thấy ${targetUsers.length} user liên quan.`);
       
       let targetTokens: string[] = [];
       targetUsers.forEach(u => {
-        if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
-           // Log ra để biết user nào đã có token
-           console.log(`✅ User ${u.username} có ${u.fcmTokens.length} tokens.`);
+        if (u.fcmTokens && Array.isArray(u.fcmTokens) && u.fcmTokens.length > 0) {
+           console.log(`   + User [${u.username}] có ${u.fcmTokens.length} tokens.`);
            targetTokens = [...targetTokens, ...u.fcmTokens];
         } else {
-           console.log(`❌ User ${u.username} CHƯA CÓ Token.`);
+           console.log(`   - User [${u.username}] KHÔNG CÓ token.`);
         }
       });
 
-      
-      // 4. GỬI (ĐOẠN CODE ĐÃ SỬA ĐỂ BẮT LỖI SERVER)
-      if (targetTokens.length > 0) {
-         console.log(`🚀 Đang bắn thông báo tới ${targetTokens.length} thiết bị...`);
-         
-         try {
-           const res = await fetch('/api/send-fcm', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                 tokens: targetTokens,
-                 title: "LUXORA PROTOCOL",
-                 body: `[${taskId}] ${taskName} cần review!`
-              })
-           });
+      console.log(`🎯 [DEBUG] Tổng số Token thu được: ${targetTokens.length}`);
 
-           // 👇 KIỂM TRA KẾT QUẢ TRƯỚC KHI ĐỌC JSON
-           if (!res.ok) {
-              // Nếu Server lỗi (500), đọc dạng text để xem lỗi gì
-              const errorText = await res.text();
-              console.error("❌ Lỗi từ Server Vercel:", errorText);
-              addLog(`Lỗi Server khi gửi Noti: ${res.status}`, "WARNING");
-           } else {
-              // Nếu Server ổn (200), mới đọc JSON
-              const data = await res.json();
-              console.log("✅ Kết quả Server trả về:", data);
-              addLog(`Đã gửi Push Notification: ${data.sent} thành công`, 'SUCCESS');
-           }
-         } catch (fetchError) {
-            console.error("Lỗi kết nối mạng:", fetchError);
+      // GỬI
+      if (targetTokens.length > 0) {
+         console.log(`🚀 [DEBUG] Đang gọi API send-fcm...`);
+         
+         const res = await fetch('/api/send-fcm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+               tokens: targetTokens,
+               title: "LUXORA PROTOCOL",
+               body: `[${taskId}] ${taskName} cần bạn review!`
+            })
+         });
+
+         const text = await res.text();
+         console.log("📩 [DEBUG] Kết quả API trả về:", text);
+
+         if (res.ok) {
+            addLog(`Đã gửi Push Notification: OK`, 'SUCCESS');
+         } else {
+            addLog(`Lỗi API: ${res.status}`, "WARNING");
          }
 
       } else {
-         console.log("⚠️ Không tìm thấy Token nào hợp lệ.");
-         addLog("Không có thiết bị nào đã bật thông báo.", "WARNING");
+         console.log("❌ [DEBUG] Dừng lại: Danh sách Token rỗng.");
+         addLog("Không tìm thấy thiết bị nào để gửi.", "WARNING");
       }
       
     } catch (e) {
-      console.error("Lỗi logic hàm thông báo:", e);
+      console.error("🔥 [DEBUG] LỖI CRASH:", e);
     }
   };
 
