@@ -1,6 +1,4 @@
-// 👇 Dùng import từng phần (Modular) để tránh lỗi
-import { initializeApp, cert, getApps } from 'firebase-admin/app';
-import { getMessaging } from 'firebase-admin/messaging';
+import admin from "firebase-admin";
 
 export default async function handler(req, res) {
   // 1. CORS
@@ -19,21 +17,21 @@ export default async function handler(req, res) {
       throw new Error("Thiếu biến môi trường Firebase.");
     }
 
-    // 2. KHỞI TẠO (Dùng getApps để kiểm tra thay vì admin.apps)
-    if (!getApps().length) {
+    // 2. KHỞI TẠO (Kiểm tra admin.apps)
+    if (!admin.apps.length) {
       const privateKey = rawKey.replace(/\\n/g, '\n');
       
-      initializeApp({
-        credential: cert({
+      admin.initializeApp({
+        credential: admin.credential.cert({
           projectId,
           clientEmail,
           privateKey,
         }),
       });
-      console.log("✅ Firebase Admin Initialized (Modular)");
+      console.log("✅ Firebase Admin Initialized");
     }
 
-    // 3. CHUẨN BỊ GỬI
+    // 3. CHUẨN BỊ GÓI TIN
     const { tokens, title, body } = req.body;
     
     if (!tokens || !tokens.length) {
@@ -56,15 +54,13 @@ export default async function handler(req, res) {
       tokens: tokens,
     };
 
-    // 4. GỬI TIN (Dùng getMessaging() thay vì admin.messaging())
-    const messaging = getMessaging();
-    const response = await messaging.sendMulticast(message);
+    // 4. GỬI TIN BẰNG HÀM MỚI (sendEachForMulticast)
+    // sendMulticast đã cũ, v13 dùng sendEachForMulticast
+    const response = await admin.messaging().sendEachForMulticast(message);
     
     console.log(`🚀 FCM Sent: ${response.successCount}/${tokens.length}`);
 
-    // Log lỗi chi tiết nếu có
     if (response.failureCount > 0) {
-       // Lọc ra các lỗi để dễ debug
        const errors = response.responses
          .map((r, idx) => r.error ? { token: tokens[idx], error: r.error.message } : null)
          .filter(r => r);
@@ -79,6 +75,7 @@ export default async function handler(req, res) {
 
   } catch (error) {
     console.error("🔥 SERVER ERROR:", error);
+    // Trả về JSON để React đọc được lỗi
     return res.status(500).json({ 
       error: "Internal Server Error", 
       message: error.message,
