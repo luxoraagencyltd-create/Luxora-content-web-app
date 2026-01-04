@@ -1,8 +1,9 @@
-// 👇 DÙNG IMPORT THAY VÌ REQUIRE
-import admin from "firebase-admin";
+// 👇 Dùng import từng phần (Modular) để tránh lỗi
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getMessaging } from 'firebase-admin/messaging';
 
 export default async function handler(req, res) {
-  // 1. CORS Headers
+  // 1. CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST,OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
@@ -10,50 +11,35 @@ export default async function handler(req, res) {
   if (req.method === 'OPTIONS') return res.status(200).end();
 
   try {
-    // 2. KIỂM TRA BIẾN MÔI TRƯỜNG
     const projectId = process.env.FIREBASE_PROJECT_ID;
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     const rawKey = process.env.FIREBASE_PRIVATE_KEY;
 
     if (!projectId || !clientEmail || !rawKey) {
-      console.error("❌ THIẾU BIẾN MÔI TRƯỜNG TRÊN VERCEL");
-      return res.status(500).json({ 
-        error: "Configuration Error", 
-        message: "Thiếu biến môi trường (ProjectID, Email, Key)." 
+      throw new Error("Thiếu biến môi trường Firebase.");
+    }
+
+    // 2. KHỞI TẠO (Dùng getApps để kiểm tra thay vì admin.apps)
+    if (!getApps().length) {
+      const privateKey = rawKey.replace(/\\n/g, '\n');
+      
+      initializeApp({
+        credential: cert({
+          projectId,
+          clientEmail,
+          privateKey,
+        }),
       });
+      console.log("✅ Firebase Admin Initialized (Modular)");
     }
 
-    // 3. KHỞI TẠO FIREBASE ADMIN (Dùng import admin từ ở trên)
-    if (!admin.apps.length) {
-      try {
-        // Xử lý xuống dòng cho Private Key
-        const privateKey = rawKey.replace(/\\n/g, '\n');
-
-        admin.initializeApp({
-          credential: admin.credential.cert({
-            projectId,
-            clientEmail,
-            privateKey,
-          }),
-        });
-        console.log("✅ Firebase Admin Init Success");
-      } catch (initError) {
-        console.error("❌ Firebase Admin Init Failed:", initError);
-        return res.status(500).json({ 
-           error: "Init Failed", 
-           message: "Lỗi khởi tạo Firebase: " + initError.message 
-        });
-      }
-    }
-
-    // 4. GỬI TIN
+    // 3. CHUẨN BỊ GỬI
     const { tokens, title, body } = req.body;
     
     if (!tokens || !tokens.length) {
-       return res.status(200).json({ message: "No tokens provided" });
+       return res.status(200).json({ message: "No tokens" });
     }
 
-    // Lấy URL icon tuyệt đối
     const host = req.headers.host; 
     const protocol = req.headers['x-forwarded-proto'] || 'https';
     const iconUrl = `${protocol}://${host}/assets/logo-192.png`;
@@ -70,13 +56,19 @@ export default async function handler(req, res) {
       tokens: tokens,
     };
 
-    const response = await admin.messaging().sendMulticast(message);
+    // 4. GỬI TIN (Dùng getMessaging() thay vì admin.messaging())
+    const messaging = getMessaging();
+    const response = await messaging.sendMulticast(message);
     
     console.log(`🚀 FCM Sent: ${response.successCount}/${tokens.length}`);
-    
-    // Log lỗi chi tiết nếu có token hỏng
+
+    // Log lỗi chi tiết nếu có
     if (response.failureCount > 0) {
-       console.error("FCM Failures:", JSON.stringify(response.responses));
+       // Lọc ra các lỗi để dễ debug
+       const errors = response.responses
+         .map((r, idx) => r.error ? { token: tokens[idx], error: r.error.message } : null)
+         .filter(r => r);
+       console.error("FCM Failures:", JSON.stringify(errors));
     }
 
     return res.status(200).json({ 
@@ -86,11 +78,11 @@ export default async function handler(req, res) {
     });
 
   } catch (error) {
-    console.error("🔥 SERVER CRASH HANDLED:", error);
+    console.error("🔥 SERVER ERROR:", error);
     return res.status(500).json({ 
       error: "Internal Server Error", 
       message: error.message,
-      stack: error.stack 
+      stack: error.stack
     });
   }
 }
