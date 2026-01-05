@@ -243,10 +243,11 @@ const App: React.FC = () => {
   const createSystemNotification = async (task: Task) => {
     if (!selectedProjectId) return;
     
+    // Key chống duplicate
     const triggerKey = `${task.id}_REVIEW_ALERT`; 
 
     try {
-      // 1. Check trùng (Giữ nguyên)
+      // Check trùng
       const q = query(
         collection(db, 'messages'),
         where('projectId', '==', selectedProjectId),
@@ -254,41 +255,39 @@ const App: React.FC = () => {
       );
       const existingDocs = await getDocs(q);
 
-      if (!existingDocs.empty) {
-          console.log("⚠️ Đã báo rồi, không báo lại.");
-          return;
-      }
+      if (!existingDocs.empty) return;
 
-      // 👇 2. TẠO NỘI DUNG CHI TIẾT
-      // Lấy dữ liệu từ task (đã được map từ cột H và I)
-      const detailContent = `STATUS UPDATE: [${task.id}] ${task.name} >> REVIEW_MODE_ACTIVATED
+      // 👇 4. NỘI DUNG TIN NHẮN ĐẦY ĐỦ
+      // Lấy seeding và contentBody từ task. 
+      // Nếu là link thì vẫn hiển thị link để người dùng click
+      const messageContent = `STATUS UPDATE: [${task.id}] ${task.name} >> REVIEW_MODE_ACTIVATED
 --------------------------
-📌 Nội dung Seeding:
-${task.seeding || '(Chưa có nội dung)'}
+📌 SEEDING CONTENT:
+${task.seeding || '(Chưa cập nhật)'}
 
-📝 Nội dung bài:
-${task.contentBody || '(Chưa có nội dung)'}
+📝 MAIN CONTENT:
+${task.contentBody || '(Chưa cập nhật)'}
 
-🔗 Link: ${task.link !== '#' ? task.link : 'N/A'}`;
+🔗 ASSETS: ${task.image ? task.image : 'N/A'}`;
 
-      // Lưu tin nhắn hệ thống vào Firestore
+      // Lưu tin nhắn hệ thống
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
         senderId: 'SYSTEM',
         senderName: 'CORE AI',
         senderRole: 'ADMIN',
-        text: detailContent, // Sử dụng nội dung chi tiết
+        text: messageContent, 
         timestamp: new Date(),
         type: 'NOTIFICATION',
         triggerKey: triggerKey
       });
 
-      // 3. Gửi Push Notification (Giữ nguyên logic gửi, chỉ sửa body cho ngắn gọn)
+      // Gửi Push Notification (Giữ ngắn gọn để không bị cắt)
       const clientUsers = users.filter(u => 
         u.role === 'CLIENT' && 
         (currentProject?.clientIds || []).includes(u.id)
       );
-
+      
       let targetTokens: string[] = [];
       clientUsers.forEach(u => {
         if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
@@ -303,8 +302,7 @@ ${task.contentBody || '(Chưa có nội dung)'}
             body: JSON.stringify({
                tokens: targetTokens,
                title: "LUXORA PROTOCOL",
-               // Push notification chỉ hiện ngắn gọn để không bị cắt
-               body: `[${task.id}] ${task.name} cần review! Chạm để xem chi tiết.`
+               body: `Task [${task.id}] đã hoàn thành. Kiểm tra App để xem nội dung chi tiết.`
             })
          });
       }
