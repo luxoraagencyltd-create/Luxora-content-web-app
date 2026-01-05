@@ -410,7 +410,7 @@ const App: React.FC = () => {
             // 👇 CẬP NHẬT CÁC CỘT NỘI DUNG & LINK Ở ĐÂY
             link: getValue(['link bài đăng', 'link']), // Cột G: Link bài đăng
             seeding: getValue(['seeding', 'nội dung seeding']), // Cột H
-            contentBody: getValue(['nội dung bài']), // Cột I
+            contentBody: getValue(['content', 'nội dung bài']), // Cột I
             image: getValue(['hình', 'image']), // Cột J: Hình ảnh
             
             feedbacks: [],
