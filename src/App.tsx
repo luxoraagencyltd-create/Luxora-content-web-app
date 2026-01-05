@@ -239,18 +239,13 @@ const App: React.FC = () => {
     setLogs(prev => [newLog, ...prev].slice(0, 50));
   }, [selectedProjectId]);
 
-  const createSystemNotification = async (taskName: string, taskId: string) => {
-    console.log(`🚀 [DEBUG] Bắt đầu quy trình thông báo cho task: ${taskId}`); // 1. Bắt đầu
+  // 👇 Sửa tham số đầu vào thành (task: Task) để lấy mọi thông tin
+  const createSystemNotification = async (task: Task) => {
+    if (!selectedProjectId) return;
     
-    if (!selectedProjectId) {
-        console.log("❌ [DEBUG] Không có Project ID nào được chọn.");
-        return;
-    }
-    
-    const triggerKey = `${taskId}_REVIEW_ALERT`; 
+    const triggerKey = `${task.id}_REVIEW_ALERT`; 
 
     try {
-      // Check trùng
       const q = query(
         collection(db, 'messages'),
         where('projectId', '==', selectedProjectId),
@@ -258,81 +253,55 @@ const App: React.FC = () => {
       );
       const existingDocs = await getDocs(q);
 
-      if (!existingDocs.empty) {
-          console.log("⚠️ [DEBUG] Dừng lại: Thông báo này ĐÃ TỒN TẠI trên hệ thống.");
-          return;
-      }
+      if (!existingDocs.empty) return;
 
-      console.log("✅ [DEBUG] Chưa báo lần nào. Tiến hành tạo thông báo...");
+      // 👇 TẠO NỘI DUNG TIN NHẮN CHI TIẾT
+      // Sử dụng \n để xuống dòng
+      const messageContent = `STATUS UPDATE: [${task.id}] ${task.name} >> REVIEW_MODE_ACTIVATED
+- Nội dung seeding: ${task.seeding || '(Trống)'}
+- Nội dung bài: ${task.contentBody || '(Trống)'}
+- Link: ${task.link !== '#' ? task.link : '(Chưa có link)'}`;
 
-      // Lưu tin nhắn
+      // 1. Lưu vào Firestore
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
         senderId: 'SYSTEM',
         senderName: 'CORE AI',
         senderRole: 'ADMIN',
-        text: `STATUS UPDATE: [${taskId}] ${taskName} >> REVIEW_MODE_ACTIVATED`,
+        text: messageContent, // Dùng nội dung mới
         timestamp: new Date(),
         type: 'NOTIFICATION',
         triggerKey: triggerKey
       });
 
-      // LỌC NGƯỜI NHẬN (Lấy tất cả để test)
-      console.log("🔍 [DEBUG] Đang tìm người nhận...");
-      console.log("   - Tổng user trong hệ thống:", users.length);
-      console.log("   - Staff trong dự án:", currentProject?.staffIds);
-      console.log("   - Client trong dự án:", currentProject?.clientIds);
-
-      const targetUsers = users.filter(u => 
-        u.role === 'ADMIN' || 
-        (currentProject?.clientIds || []).includes(u.id) ||
-        (currentProject?.staffIds || []).includes(u.id)
+      // 2. Gửi Push Notification
+      const clientUsers = users.filter(u => 
+        u.role === 'CLIENT' && 
+        (currentProject?.clientIds || []).includes(u.id)
       );
 
-      console.log(`✅ [DEBUG] Tìm thấy ${targetUsers.length} user liên quan.`);
-      
       let targetTokens: string[] = [];
-      targetUsers.forEach(u => {
-        if (u.fcmTokens && Array.isArray(u.fcmTokens) && u.fcmTokens.length > 0) {
-           console.log(`   + User [${u.username}] có ${u.fcmTokens.length} tokens.`);
+      clientUsers.forEach(u => {
+        if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
            targetTokens = [...targetTokens, ...u.fcmTokens];
-        } else {
-           console.log(`   - User [${u.username}] KHÔNG CÓ token.`);
         }
       });
 
-      console.log(`🎯 [DEBUG] Tổng số Token thu được: ${targetTokens.length}`);
-
-      // GỬI
       if (targetTokens.length > 0) {
-         console.log(`🚀 [DEBUG] Đang gọi API send-fcm...`);
-         
-         const res = await fetch('/api/send-fcm', {
+         await fetch('/api/send-fcm', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                tokens: targetTokens,
                title: "LUXORA PROTOCOL",
-               body: `[${taskId}] ${taskName} cần bạn review!`
+               // Push Notification nên ngắn gọn hơn 1 chút để không bị cắt
+               body: `[${task.id}] ${task.name} cần review!\nNội dung: ${task.contentBody ? task.contentBody.substring(0, 50) + '...' : 'Chi tiết trong app'}`
             })
          });
-
-         const text = await res.text();
-         console.log("📩 [DEBUG] Kết quả API trả về:", text);
-
-         if (res.ok) {
-            addLog(`Đã gửi Push Notification: OK`, 'SUCCESS');
-         } else {
-            addLog(`Lỗi API: ${res.status}`, "WARNING");
-         }
-
-      } else {
-         console.log("❌ [DEBUG] Dừng lại: Danh sách Token rỗng.");
-         addLog("Không tìm thấy thiết bị nào để gửi.", "WARNING");
       }
       
     } catch (e) {
-      console.error("🔥 [DEBUG] LỖI CRASH:", e);
+      console.error("Lỗi gửi thông báo:", e);
     }
   };
 
@@ -474,7 +443,7 @@ const App: React.FC = () => {
                         triggeredIds.add(newTask.id);
                         
                         playSound();
-                        createSystemNotification(newTask.name, newTask.id);
+                        createSystemNotification(newTask);
                         addLog(`🔔 New Trigger: ${newTask.id} cần review!`, 'SUCCESS');
                     }
                 }
