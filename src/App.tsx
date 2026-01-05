@@ -243,11 +243,11 @@ const App: React.FC = () => {
   const createSystemNotification = async (task: Task) => {
     if (!selectedProjectId) return;
     
-    // Key chống duplicate
+    // Key để tránh spam thông báo trùng
     const triggerKey = `${task.id}_REVIEW_ALERT`; 
 
     try {
-      // Check trùng
+      // 1. Kiểm tra xem đã báo chưa
       const q = query(
         collection(db, 'messages'),
         where('projectId', '==', selectedProjectId),
@@ -255,11 +255,9 @@ const App: React.FC = () => {
       );
       const existingDocs = await getDocs(q);
 
-      if (!existingDocs.empty) return;
+      if (!existingDocs.empty) return; // Đã báo rồi thì thôi
 
-      // 👇 4. NỘI DUNG TIN NHẮN ĐẦY ĐỦ
-      // Lấy seeding và contentBody từ task. 
-      // Nếu là link thì vẫn hiển thị link để người dùng click
+      // 👇 2. CẬP NHẬT NỘI DUNG TIN NHẮN (Đã tách riêng Link và Hình)
       const messageContent = `STATUS UPDATE: [${task.id}] ${task.name} >> REVIEW_MODE_ACTIVATED
 --------------------------
 📌 SEEDING CONTENT:
@@ -268,9 +266,13 @@ ${task.seeding || '(Chưa cập nhật)'}
 📝 MAIN CONTENT:
 ${task.contentBody || '(Chưa cập nhật)'}
 
-🔗 ASSETS: ${task.image ? task.image : 'N/A'}`;
+🖼️ HÌNH ẢNH (Source): 
+${task.image ? task.image : 'N/A'}
 
-      // Lưu tin nhắn hệ thống
+🔗 LINK BÀI ĐĂNG: 
+${task.link && task.link !== '#' ? task.link : 'N/A'}`;
+
+      // 3. Lưu vào Firestore (Chat)
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
         senderId: 'SYSTEM',
@@ -282,12 +284,13 @@ ${task.contentBody || '(Chưa cập nhật)'}
         triggerKey: triggerKey
       });
 
-      // Gửi Push Notification (Giữ ngắn gọn để không bị cắt)
+      // 4. Gửi Push Notification (Cho điện thoại)
+      // ... (Phần logic tìm user và gửi FCM giữ nguyên) ...
       const clientUsers = users.filter(u => 
         u.role === 'CLIENT' && 
         (currentProject?.clientIds || []).includes(u.id)
       );
-      
+
       let targetTokens: string[] = [];
       clientUsers.forEach(u => {
         if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
@@ -302,7 +305,7 @@ ${task.contentBody || '(Chưa cập nhật)'}
             body: JSON.stringify({
                tokens: targetTokens,
                title: "LUXORA PROTOCOL",
-               body: `Task [${task.id}] đã hoàn thành. Kiểm tra App để xem nội dung chi tiết.`
+               body: `[${task.id}] ${task.name} cần review! Chạm để xem chi tiết.`
             })
          });
       }
@@ -381,7 +384,7 @@ ${task.contentBody || '(Chưa cập nhật)'}
             planEnd: getValue(['plan end', 'thời gian đăng']), // Cột C
             status: getValue(['status', 'trạng thái']) || 'To do', // Cột D
             pillar: getValue(['pillar']), // Cột E
-            name: getValue(['angle', 'bản vẽ']), // Cột F - Tên công việc (Angle)
+            name: getValue(['angle']), // Cột F - Tên công việc (Angle)
             
             // 👇 CẬP NHẬT CÁC CỘT NỘI DUNG & LINK Ở ĐÂY
             link: getValue(['link bài đăng', 'link']), // Cột G: Link bài đăng
