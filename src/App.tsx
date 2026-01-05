@@ -243,11 +243,16 @@ const App: React.FC = () => {
   const createSystemNotification = async (task: Task) => {
     if (!selectedProjectId) return;
     
-    // Key để tránh spam thông báo trùng
+    // Debug xem task nhận vào có dữ liệu không
+    console.log("🔔 Preparing Notification for Task:", task);
+    console.log("   - Seeding:", task.seeding);
+    console.log("   - Content:", task.contentBody);
+    console.log("   - Image:", task.image);
+    console.log("   - Link:", task.link);
+
     const triggerKey = `${task.id}_REVIEW_ALERT`; 
 
     try {
-      // 1. Kiểm tra xem đã báo chưa
       const q = query(
         collection(db, 'messages'),
         where('projectId', '==', selectedProjectId),
@@ -255,9 +260,9 @@ const App: React.FC = () => {
       );
       const existingDocs = await getDocs(q);
 
-      if (!existingDocs.empty) return; // Đã báo rồi thì thôi
+      if (!existingDocs.empty) return;
 
-      // 👇 2. CẬP NHẬT NỘI DUNG TIN NHẮN (Đã tách riêng Link và Hình)
+      // 👇 NỘI DUNG TIN NHẮN CHUẨN (Tách riêng Hình và Link)
       const messageContent = `STATUS UPDATE: [${task.id}] ${task.name} >> REVIEW_MODE_ACTIVATED
 --------------------------
 📌 SEEDING CONTENT:
@@ -266,13 +271,13 @@ ${task.seeding || '(Chưa cập nhật)'}
 📝 MAIN CONTENT:
 ${task.contentBody || '(Chưa cập nhật)'}
 
-🖼️ HÌNH ẢNH (Source): 
+🖼️ HÌNH ẢNH (SOURCE): 
 ${task.image ? task.image : 'N/A'}
 
-🔗 LINK BÀI ĐĂNG: 
+🔗 LINK BÀI ĐĂNG (RESULT): 
 ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
 
-      // 3. Lưu vào Firestore (Chat)
+      // 1. Lưu vào Firestore
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
         senderId: 'SYSTEM',
@@ -284,8 +289,7 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
         triggerKey: triggerKey
       });
 
-      // 4. Gửi Push Notification (Cho điện thoại)
-      // ... (Phần logic tìm user và gửi FCM giữ nguyên) ...
+      // 2. Gửi Push (Giữ ngắn gọn)
       const clientUsers = users.filter(u => 
         u.role === 'CLIENT' && 
         (currentProject?.clientIds || []).includes(u.id)
