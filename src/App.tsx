@@ -246,6 +246,7 @@ const App: React.FC = () => {
     const triggerKey = `${task.id}_REVIEW_ALERT`; 
 
     try {
+      // 1. Check trùng (Giữ nguyên)
       const q = query(
         collection(db, 'messages'),
         where('projectId', '==', selectedProjectId),
@@ -253,28 +254,36 @@ const App: React.FC = () => {
       );
       const existingDocs = await getDocs(q);
 
-      if (!existingDocs.empty) return;
+      if (!existingDocs.empty) {
+          console.log("⚠️ Đã báo rồi, không báo lại.");
+          return;
+      }
 
-      // 👇 TẠO NỘI DUNG TIN NHẮN CHI TIẾT
-      // Sử dụng \n để xuống dòng
-      const messageContent = `STATUS UPDATE: [${task.id}] ${task.name} >> REVIEW_MODE_ACTIVATED
-- Nội dung seeding: ${task.seeding || '(Trống)'}
-- Nội dung bài: ${task.contentBody || '(Trống)'}
-- Link: ${task.link !== '#' ? task.link : '(Chưa có link)'}`;
+      // 👇 2. TẠO NỘI DUNG CHI TIẾT
+      // Lấy dữ liệu từ task (đã được map từ cột H và I)
+      const detailContent = `STATUS UPDATE: [${task.id}] ${task.name} >> REVIEW_MODE_ACTIVATED
+--------------------------
+📌 Nội dung Seeding:
+${task.seeding || '(Chưa có nội dung)'}
 
-      // 1. Lưu vào Firestore
+📝 Nội dung bài:
+${task.contentBody || '(Chưa có nội dung)'}
+
+🔗 Link: ${task.link !== '#' ? task.link : 'N/A'}`;
+
+      // Lưu tin nhắn hệ thống vào Firestore
       await addDoc(collection(db, 'messages'), {
         projectId: selectedProjectId,
         senderId: 'SYSTEM',
         senderName: 'CORE AI',
         senderRole: 'ADMIN',
-        text: messageContent, // Dùng nội dung mới
+        text: detailContent, // Sử dụng nội dung chi tiết
         timestamp: new Date(),
         type: 'NOTIFICATION',
         triggerKey: triggerKey
       });
 
-      // 2. Gửi Push Notification
+      // 3. Gửi Push Notification (Giữ nguyên logic gửi, chỉ sửa body cho ngắn gọn)
       const clientUsers = users.filter(u => 
         u.role === 'CLIENT' && 
         (currentProject?.clientIds || []).includes(u.id)
@@ -294,8 +303,8 @@ const App: React.FC = () => {
             body: JSON.stringify({
                tokens: targetTokens,
                title: "LUXORA PROTOCOL",
-               // Push Notification nên ngắn gọn hơn 1 chút để không bị cắt
-               body: `[${task.id}] ${task.name} cần review!\nNội dung: ${task.contentBody ? task.contentBody.substring(0, 50) + '...' : 'Chi tiết trong app'}`
+               // Push notification chỉ hiện ngắn gọn để không bị cắt
+               body: `[${task.id}] ${task.name} cần review! Chạm để xem chi tiết.`
             })
          });
       }
