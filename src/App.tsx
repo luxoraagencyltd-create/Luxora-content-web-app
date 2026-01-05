@@ -389,21 +389,34 @@ const App: React.FC = () => {
       }
       
       if (result.tasks06) {
-        const t06 = (result.tasks06 || []).map((row: any) => ({
-          id: String(row['id'] || row['ID task'] || ''),
-          projectId: selectedProjectId,
-          phase: String(row['type'] || row['Dạng content'] || ''),
-          planEnd: String(row['publishDate'] || row['Thời gian đăng'] || ''),
-          status: String(row['status'] || row['Status'] || 'To do'),
-          pillar: String(row['pillar'] || row['Pillar'] || ''),
-          name: String(row['angle'] || row['Angle'] || ''),
-          link: String(row['link'] || row['Link bài đăng'] || ''),
-          seeding: String(row['seeding'] || row['Nội dung seeding'] || ''),
-          contentBody: String(row['content'] || row['Nội dung bài'] || ''),
-          image: String(row['image'] || row['Hình'] || ''),
-          feedbacks: [],
-          tab: '06' as const
-        }));
+        const t06 = (result.tasks06 || []).map((row: any) => {
+          // Hàm helper giúp tìm tên cột không phân biệt hoa thường
+          const getValue = (keywords: string[]) => {
+            const key = Object.keys(row).find(k => 
+              keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase()))
+            );
+            return key ? String(row[key]) : '';
+          };
+          
+          return {
+            id: String(getValue(['id', 'id task'])),
+            projectId: selectedProjectId,
+            phase: getValue(['phase', 'dạng content']), // Cột B
+            planEnd: getValue(['plan end', 'thời gian đăng']), // Cột C
+            status: getValue(['status', 'trạng thái']) || 'To do', // Cột D
+            pillar: getValue(['pillar']), // Cột E
+            name: getValue(['angle', 'bản vẽ']), // Cột F - Tên công việc (Angle)
+            
+            // 👇 CẬP NHẬT CÁC CỘT NỘI DUNG & LINK Ở ĐÂY
+            link: getValue(['link bài đăng', 'link']), // Cột G: Link bài đăng
+            seeding: getValue(['seeding', 'nội dung seeding']), // Cột H
+            contentBody: getValue(['nội dung bài']), // Cột I
+            image: getValue(['hình', 'image']), // Cột J: Hình ảnh
+            
+            feedbacks: [],
+            tab: '06' as const
+          };
+        });
         fetchedTasks = [...fetchedTasks, ...t06];
       }
       
