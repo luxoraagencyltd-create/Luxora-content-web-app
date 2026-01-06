@@ -184,18 +184,21 @@ const App: React.FC = () => {
       }
       
       // Xử lý Task 06
+
       if (result.tasks06) {
-        // 👇 DEBUG: In ra danh sách cột để bạn kiểm tra tên cột thật sự
-        if (result.tasks06.length > 0 && !isSilent) {
-            console.log("🔍 RAW DATA KEYS (Tasks 06):", Object.keys(result.tasks06[0]));
+        // 👇 DEBUG: In ra key của dòng đầu tiên để soi tên cột
+        if (result.tasks06.length > 0) {
+            console.log("🔍 REAL SHEET COLUMNS:", Object.keys(result.tasks06[0]));
         }
 
         const t06 = (result.tasks06 || []).map((row: any) => {
+          // Hàm tìm giá trị "chấp hết" mọi thể loại tên cột
           const getValue = (keywords: string[]) => {
-            // Tìm key chứa từ khóa (ko phân biệt hoa thường)
-            const key = Object.keys(row).find(k => 
-              keywords.some(kw => k.toLowerCase().trim().includes(kw.toLowerCase()))
-            );
+            const key = Object.keys(row).find(k => {
+               // Chuyển hết về chữ thường + xóa xuống dòng + xóa khoảng trắng thừa
+               const normalizedKey = k.toLowerCase().replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
+               return keywords.some(kw => normalizedKey.includes(kw.toLowerCase()));
+            });
             return key ? String(row[key]) : '';
           };
           
@@ -208,8 +211,8 @@ const App: React.FC = () => {
             pillar: getValue(['pillar']),
             name: getValue(['angle']), 
             
-            // 👇 CẬP NHẬT KEYWORDS CHO LINK: Ưu tiên "link bài", "link bai" trước "link"
-            link: getValue(['link bài đăng', 'link bai dang', 'link bài', 'bài đăng', 'link', 'g']), 
+            // 👇 THÊM TỪ KHÓA MỚI MẠNH MẼ HƠN
+            link: getValue(['link bài đăng', 'link', 'bài đăng', 'url', 'g']), 
             
             image: getValue(['hình', 'image', 'picture', 'j']), 
             seeding: getValue(['seeding', 'nội dung seeding']),
