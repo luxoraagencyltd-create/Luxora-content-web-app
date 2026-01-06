@@ -15,7 +15,6 @@ import PWAPrompt from './components/PWAPrompt';
 import MobileNavbar from './components/MobileNavbar';
 import { requestNotificationPermission } from './lib/notification'; 
 import { getMessaging, onMessage } from "firebase/messaging";
-import { SDK_VERSION } from "firebase/app";
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFTCYBBwC2s0Cu0KQkAjnJ15P9FmQx68orggfKhUtRMiA-VP2EaXWfruOCTfEmXdDUkQ/exec";
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
