@@ -346,13 +346,11 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
 
       if (result.tasks05) {
         const t05 = result.tasks05.map((row: any) => {
-          const getValue = (keywords: string[]) => {
-            const key = Object.keys(row).find(k => 
-              keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase()))
-            );
+           const getValue = (keywords: string[]) => {
+            const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase())));
             return key ? String(row[key]) : '';
-          };
-          return {
+           };
+           return {
             id: String(getValue(['id', 'id task'])),
             projectId: selectedProjectId,
             phase: getValue(['phase', 'giai đoạn']),
@@ -374,31 +372,23 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
       
       if (result.tasks06) {
         const t06 = (result.tasks06 || []).map((row: any) => {
-          
-          // Hàm tìm giá trị (Debug: In ra nếu cần)
           const getValue = (keywords: string[]) => {
-            const key = Object.keys(row).find(k => 
-              keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase()))
-            );
+            const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase())));
             return key ? String(row[key]) : '';
           };
           
           return {
             id: String(getValue(['id', 'id task'])),
             projectId: selectedProjectId,
-            phase: getValue(['phase', 'dạng content']),
+            phase: getValue(['phase', 'dạng content']), 
             planEnd: getValue(['plan end', 'thời gian đăng']),
             status: getValue(['status', 'trạng thái']) || 'To do',
             pillar: getValue(['pillar']),
-            name: getValue(['angle']),
+            name: getValue(['angle']), 
             
-            // 👇 CẬP NHẬT KỸ PHẦN NÀY
-            // Thêm 'bài đăng', 'g' để chắc chắn bắt đúng cột G
-            link: getValue(['link bài đăng', 'link bài', 'bài đăng', 'link']), 
-            
-            // Thêm 'j' để bắt cột J
-            image: getValue(['hình', 'image', 'ảnh', 'picture']), 
-            
+            // 👇 QUAN TRỌNG: Mapping Link và Image
+            link: getValue(['link bài đăng', 'link', 'g']), 
+            image: getValue(['hình', 'image', 'j']), 
             seeding: getValue(['seeding', 'nội dung seeding']),
             contentBody: getValue(['content', 'nội dung bài']),
             
@@ -439,42 +429,85 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
          }));
       }
 
-      // --- 👇 LOGIC TRIGGER (CẬP NHẬT) 👇 ---
+      // --- 👇 LOGIC TRIGGER VÀ TẠO NOTIFICATION (VIẾT TRỰC TIẾP Ở ĐÂY) ---
       if (prevTasksRef.current.length > 0) {
         const triggeredIds = new Set();
         
-        fetchedTasks.forEach(newTask => {
+        for (const newTask of fetchedTasks) {
             const oldTask = prevTasksRef.current.find(t => t.id === newTask.id);
             
             if (oldTask) {
-                // Chuẩn hóa status để so sánh chính xác
                 const oldStatus = (oldTask.status || '').toLowerCase().trim();
                 const newStatus = (newTask.status || '').toLowerCase().trim();
-                
-                // Debug: In ra console để xem nó đọc được gì
-                // console.log(`Checking ${newTask.id}: ${oldStatus} -> ${newStatus}`);
 
-                // Điều kiện: Cũ KHÔNG PHẢI là review -> Mới LÀ review
-                // (Chấp nhận cả 'review', 'Review', 'REVIEW'...)
+                // Nếu chuyển sang Review
                 if (oldStatus !== 'review' && newStatus === 'review') {
-                    
                     if (!triggeredIds.has(newTask.id)) {
-                        console.log("🔥 PHÁT HIỆN THAY ĐỔI: Triggering notification for", newTask.id);
                         triggeredIds.add(newTask.id);
                         
+                        console.log("🔥 Triggering Notification for", newTask.id);
                         playSound();
-                        createSystemNotification(newTask);
-                        addLog(`🔔 New Trigger: ${newTask.id} cần review!`, 'SUCCESS');
+
+                        // --- TẠO NỘI DUNG TIN NHẮN (Lấy trực tiếp từ newTask mới nhất) ---
+                        const messageContent = `STATUS UPDATE: [${newTask.id}] ${newTask.name} >> REVIEW_MODE_ACTIVATED
+--------------------------
+📌 SEEDING CONTENT:
+${newTask.seeding || '(Chưa cập nhật)'}
+
+📝 MAIN CONTENT:
+${newTask.contentBody || '(Chưa cập nhật)'}
+
+🖼️ HÌNH ẢNH (SOURCE): 
+${newTask.image ? newTask.image : 'N/A'}
+
+🔗 LINK BÀI ĐĂNG: 
+${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
+                        
+                        // --- GỬI FIRESTORE ---
+                        const triggerKey = `${newTask.id}_REVIEW_ALERT`;
+                        const q = query(collection(db, 'messages'), where('projectId', '==', selectedProjectId), where('triggerKey', '==', triggerKey));
+                        const existingDocs = await getDocs(q);
+                        
+                        if (existingDocs.empty) {
+                             await addDoc(collection(db, 'messages'), {
+                                projectId: selectedProjectId,
+                                senderId: 'SYSTEM',
+                                senderName: 'CORE AI',
+                                senderRole: 'ADMIN',
+                                text: messageContent, 
+                                timestamp: new Date(),
+                                type: 'NOTIFICATION',
+                                triggerKey: triggerKey
+                              });
+                             
+                             // --- GỬI PUSH NOTIFICATION ---
+                             // (Đoạn lọc user và fetch API giữ nguyên như cũ)
+                             const clientUsers = users.filter(u => u.role === 'CLIENT' && (currentProject?.clientIds || []).includes(u.id));
+                             let targetTokens: string[] = [];
+                             clientUsers.forEach(u => { if (u.fcmTokens) targetTokens.push(...u.fcmTokens); });
+                             
+                             if (targetTokens.length > 0) {
+                                await fetch('/api/send-fcm', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                       tokens: targetTokens,
+                                       title: "LUXORA PROTOCOL",
+                                       body: `[${newTask.id}] ${newTask.name} cần review!`
+                                    })
+                                });
+                             }
+                             
+                             addLog(`🔔 New Trigger: ${newTask.id} cần review!`, 'SUCCESS');
+                        }
                     }
                 }
             }
-        });
+        }
       }
 
       setTasks(fetchedTasks);
       prevTasksRef.current = fetchedTasks;
-
-
 
       if (!isSilent) addLog("DATA SYNC COMPLETE. SYSTEM UPDATED.", "SUCCESS");
     } catch (error) {
@@ -483,7 +516,7 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
       isFetchingRef.current = false;
       setIsLoading(false);
     }
-  }, [selectedProjectId, addLog, appConfig, currentProject]);
+  }, [selectedProjectId, addLog, appConfig, currentProject, users]); 
 
   useEffect(() => {
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => setUsers(snap.docs.map(d => d.data() as User)));
