@@ -11,12 +11,9 @@ interface Props {
   projectName?: string;
   activeTaskId: string | null;
   draftMessage?: string;
-  
-  // 👇 1. KHAI BÁO PROP MỚI Ở ĐÂY
   hasPendingFeedback?: boolean; 
 }
 
-// 👇 2. THÊM hasPendingFeedback VÀO DANH SÁCH NHẬN PROPS
 const ReviewPortal: React.FC<Props> = ({ 
   messages, users, currentUser, onAction, onSendMessage, 
   isWaiting, projectName, activeTaskId, draftMessage, hasPendingFeedback 
@@ -76,10 +73,41 @@ const ReviewPortal: React.FC<Props> = ({
     setReplyTo(null);
   };
 
+  // 👇 HÀM FORMAT TEXT MỚI (Xử lý cả Link và Tag)
   const formatText = (text: string) => {
-    return text.split(/(@\w+)/g).map((part, index) => 
-      part.startsWith('@') ? <span key={index} className="text-[#00f2ff] font-black underline decoration-[#00f2ff]/30">{part}</span> : part
-    );
+    // Regex: Tách chuỗi dựa trên (URL) hoặc (@Tag)
+    // URL: Bắt đầu bằng http:// hoặc https://, kết thúc khi gặp khoảng trắng
+    const regex = /((?:https?:\/\/)[^\s]+|@\w+)/g;
+
+    return text.split(regex).map((part, index) => {
+      // 1. Nếu là Link
+      if (part.match(/^(https?:\/\/)/)) {
+        return (
+          <a 
+            key={index}
+            href={part}
+            target="_blank"
+            rel="noreferrer"
+            className="text-[#00f3ff] hover:text-white underline break-all cursor-pointer" 
+            // break-all giúp link dài tự xuống dòng
+          >
+            {part}
+          </a>
+        );
+      }
+      
+      // 2. Nếu là Tag
+      if (part.startsWith('@')) {
+        return (
+          <span key={index} className="text-[#00f3ff] font-black underline decoration-[#00f3ff]/30">
+            {part}
+          </span>
+        );
+      }
+
+      // 3. Text thường
+      return part;
+    });
   };
 
   const getReplyPreview = (id: string) => messages.find(m => m.id === id);
@@ -90,7 +118,7 @@ const ReviewPortal: React.FC<Props> = ({
       <div className="h-10 bg-[#050404] flex items-center justify-between px-8 text-[#a39e93] code-font text-[9px] font-bold">
         <span>GIAO THỨC TRỰC TUYẾN</span>
         <div className="flex gap-2">
-          <i className="fa-solid fa-signal text-[#00f2ff]"></i>
+          <i className="fa-solid fa-signal text-[#00f3ff]"></i>
           <i className="fa-solid fa-battery-three-quarters"></i>
         </div>
       </div>
@@ -102,7 +130,7 @@ const ReviewPortal: React.FC<Props> = ({
             <div>
                <h3 className="heritage-font font-black text-sm tracking-widest text-[#d4af37]">{projectName || 'Dự Án Nội Bộ'}</h3>
                <div className="flex items-center gap-1.5 mt-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#00f2ff] animate-pulse"></span>
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00f3ff] animate-pulse"></span>
                   <span className="code-font text-[9px] text-[#a39e93] font-bold uppercase tracking-widest">Kênh Trao Đổi Dự Án</span>
                </div>
             </div>
@@ -120,6 +148,21 @@ const ReviewPortal: React.FC<Props> = ({
         {messages.map(msg => {
            const isMine = msg.senderId === currentUser.id;
            const replyMsg = msg.replyToId ? getReplyPreview(msg.replyToId) : null;
+           
+           // Style riêng cho Notification
+           if (msg.type === 'NOTIFICATION') {
+              return (
+                 <div key={msg.id} className="flex justify-center my-4 w-full animate-in fade-in zoom-in">
+                    <div className="bg-[#0f1115] border border-[#00f3ff]/30 text-[#e0e0e0] p-4 rounded-sm text-[10px] code-font shadow-[0_0_15px_rgba(0,243,255,0.1)] max-w-[90%] relative overflow-hidden">
+                       <div className="absolute top-0 left-0 w-1 h-full bg-[#00f3ff]"></div>
+                       <div className="whitespace-pre-wrap break-words leading-relaxed">
+                          {formatText(msg.text)}
+                       </div>
+                    </div>
+                 </div>
+              );
+           }
+
            return (
              <div key={msg.id} className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} group`}>
                <div className={`max-w-[85%] rounded-xl p-4 text-sm shadow-xl relative border transition-all ${isMine ? 'bg-[#c41e3a]/10 border-[#c41e3a]/40 text-[#f2ede4] rounded-tr-none' : msg.senderRole === 'STAFF' ? 'bg-[#d4af37]/10 border-[#d4af37]/40 text-[#f2ede4] rounded-tl-none' : 'bg-[#1a1412] border-white/10 text-[#f2ede4] rounded-tl-none'}`}>
@@ -134,7 +177,9 @@ const ReviewPortal: React.FC<Props> = ({
                        <i className={`fa-solid ${msg.senderRole === 'STAFF' ? 'fa-user-tie' : 'fa-terminal'}`}></i> {msg.senderName}
                     </div>
                  )}
-                 <div className="whitespace-pre-wrap leading-relaxed italic">{formatText(msg.text)}</div>
+                 <div className="whitespace-pre-wrap leading-relaxed italic break-words">
+                    {formatText(msg.text)}
+                 </div>
                  <div className="flex items-center justify-between mt-3">
                    <div className={`code-font text-[7px] font-bold opacity-50 ${isMine ? 'text-[#c41e3a]' : 'text-[#a39e93]'}`}>{msg.timestamp.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
                    <button onClick={() => setReplyTo(msg)} className="opacity-0 group-hover:opacity-100 transition-opacity ml-4 text-[#d4af37] hover:text-white" title="Phản hồi"><i className="fa-solid fa-reply text-[10px]"></i></button>
@@ -144,7 +189,6 @@ const ReviewPortal: React.FC<Props> = ({
            );
         })}
 
-        {/* 👇 NÚT HOÀN TẤT FEEDBACK - HIỆN Ở ĐÂY */}
         {isWaiting && hasPendingFeedback && (
           <div className="sticky bottom-0 left-0 w-full flex justify-center py-4 bg-gradient-to-t from-[#0d0b0a] to-transparent pointer-events-none">
              <button 
