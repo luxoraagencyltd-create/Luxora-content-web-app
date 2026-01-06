@@ -73,14 +73,15 @@ const ReviewPortal: React.FC<Props> = ({
     setReplyTo(null);
   };
 
-  // 👇 HÀM FORMAT TEXT MỚI (Xử lý cả Link và Tag)
+  // 👇 HÀM FORMAT TEXT MỚI (Xử lý Hyperlink chuẩn xác)
   const formatText = (text: string) => {
-    // Regex: Tách chuỗi dựa trên (URL) hoặc (@Tag)
-    // URL: Bắt đầu bằng http:// hoặc https://, kết thúc khi gặp khoảng trắng
+    if (!text) return null;
+
+    // Regex bắt URL (http/https) và @Tag
     const regex = /((?:https?:\/\/)[^\s]+|@\w+)/g;
 
     return text.split(regex).map((part, index) => {
-      // 1. Nếu là Link
+      // 1. Nếu là Link URL -> Biến thành thẻ <a>
       if (part.match(/^(https?:\/\/)/)) {
         return (
           <a 
@@ -88,24 +89,24 @@ const ReviewPortal: React.FC<Props> = ({
             href={part}
             target="_blank"
             rel="noreferrer"
-            className="text-[#00f3ff] hover:text-white underline break-all cursor-pointer" 
-            // break-all giúp link dài tự xuống dòng
+            className="text-[#00f3ff] font-bold hover:text-white hover:underline break-all" 
+            title="Mở liên kết"
           >
             {part}
           </a>
         );
       }
       
-      // 2. Nếu là Tag
+      // 2. Nếu là Tag người dùng (@User)
       if (part.startsWith('@')) {
         return (
-          <span key={index} className="text-[#00f3ff] font-black underline decoration-[#00f3ff]/30">
+          <span key={index} className="text-[#d4af37] font-black cursor-default">
             {part}
           </span>
         );
       }
 
-      // 3. Text thường
+      // 3. Văn bản thường
       return part;
     });
   };
@@ -149,12 +150,13 @@ const ReviewPortal: React.FC<Props> = ({
            const isMine = msg.senderId === currentUser.id;
            const replyMsg = msg.replyToId ? getReplyPreview(msg.replyToId) : null;
            
-           // Style riêng cho Notification
+           // Style riêng cho Notification (Thông báo hệ thống)
            if (msg.type === 'NOTIFICATION') {
               return (
                  <div key={msg.id} className="flex justify-center my-4 w-full animate-in fade-in zoom-in">
-                    <div className="bg-[#0f1115] border border-[#00f3ff]/30 text-[#e0e0e0] p-4 rounded-sm text-[10px] code-font shadow-[0_0_15px_rgba(0,243,255,0.1)] max-w-[90%] relative overflow-hidden">
+                    <div className="bg-[#0f1115] border border-[#00f3ff]/30 text-[#e0e0e0] p-4 rounded-sm text-[10px] code-font shadow-[0_0_15px_rgba(0,243,255,0.1)] max-w-[95%] relative overflow-hidden">
                        <div className="absolute top-0 left-0 w-1 h-full bg-[#00f3ff]"></div>
+                       {/* 👇 SỬA LỖI: Thêm break-words và whitespace-pre-wrap để link dài tự xuống dòng */}
                        <div className="whitespace-pre-wrap break-words leading-relaxed">
                           {formatText(msg.text)}
                        </div>
@@ -163,6 +165,7 @@ const ReviewPortal: React.FC<Props> = ({
               );
            }
 
+           // Tin nhắn Chat thông thường
            return (
              <div key={msg.id} className={`flex flex-col ${isMine ? 'items-end' : 'items-start'} group`}>
                <div className={`max-w-[85%] rounded-xl p-4 text-sm shadow-xl relative border transition-all ${isMine ? 'bg-[#c41e3a]/10 border-[#c41e3a]/40 text-[#f2ede4] rounded-tr-none' : msg.senderRole === 'STAFF' ? 'bg-[#d4af37]/10 border-[#d4af37]/40 text-[#f2ede4] rounded-tl-none' : 'bg-[#1a1412] border-white/10 text-[#f2ede4] rounded-tl-none'}`}>
@@ -177,7 +180,8 @@ const ReviewPortal: React.FC<Props> = ({
                        <i className={`fa-solid ${msg.senderRole === 'STAFF' ? 'fa-user-tie' : 'fa-terminal'}`}></i> {msg.senderName}
                     </div>
                  )}
-                 <div className="whitespace-pre-wrap leading-relaxed italic break-words">
+                 {/* 👇 SỬA LỖI: Áp dụng formatText và break-words */}
+                 <div className="whitespace-pre-wrap break-words leading-relaxed italic">
                     {formatText(msg.text)}
                  </div>
                  <div className="flex items-center justify-between mt-3">
