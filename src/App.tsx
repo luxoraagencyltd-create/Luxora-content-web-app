@@ -15,8 +15,6 @@ import PWAPrompt from './components/PWAPrompt';
 import MobileNavbar from './components/MobileNavbar';
 import { requestNotificationPermission } from './lib/notification'; 
 import { getMessaging, onMessage } from "firebase/messaging";
-import { messaging } from "./lib/firebase";
-import { SDK_VERSION } from "firebase/app";
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFTCYBBwC2s0Cu0KQkAjnJ15P9FmQx68orggfKhUtRMiA-VP2EaXWfruOCTfEmXdDUkQ/exec";
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
@@ -39,20 +37,15 @@ const HUDCard = ({ label, count, color, active, onClick }: { label: string, coun
 );
 
 const App: React.FC = () => {
-  console.log("🔥 Firebase Client Version:", SDK_VERSION);
   // State
-  // 1. Khởi tạo state từ LocalStorage (để F5 hoặc tắt đi bật lại vẫn còn)
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const savedUser = localStorage.getItem('luxora_user');
     return savedUser ? JSON.parse(savedUser) : null;
   });
 
-  // 2. Mỗi khi currentUser thay đổi -> Lưu ngay vào LocalStorage
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('luxora_user', JSON.stringify(currentUser));
-      
-      // Tiện thể xin quyền lại (để update token nếu token cũ hết hạn)
       if ('serviceWorker' in navigator) {
          requestNotificationPermission(currentUser.id);
       }
@@ -60,6 +53,7 @@ const App: React.FC = () => {
       localStorage.removeItem('luxora_user');
     }
   }, [currentUser]);
+
   const [activeView, setActiveView] = useState<string>('dashboard');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string | null>(null);
@@ -74,7 +68,6 @@ const App: React.FC = () => {
   const [messages, setMessages] = useState<ReviewMessage[]>([]);
   const [appConfig, setAppConfig] = useState<{googleSheetUrl: string; webAppUrl: string}>({ googleSheetUrl: '', webAppUrl: '' });
   
-  // State Feedback Logic
   const [chatDraft, setChatDraft] = useState<string>('');
   const [pendingFeedbackTask, setPendingFeedbackTask] = useState<string | null>(null); 
   const [feedbackAccumulator, setFeedbackAccumulator] = useState<string[]>([]); 
@@ -92,9 +85,6 @@ const App: React.FC = () => {
         setActiveTab('06');
       } else {
         setActiveTab('05');
-      }
-      if ('serviceWorker' in navigator) {
-         requestNotificationPermission(currentUser.id);
       }
     }
   }, [currentUser]);
@@ -137,85 +127,25 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [selectedProjectId]); 
 
-  useEffect(() => {
-    // Lắng nghe tin nhắn khi App đang mở (Foreground)
-    const unsubscribe = onMessage(messaging, (payload) => {
-      console.log('Foreground Message:', payload);
-      
-      // Tự tạo Notification của trình duyệt
-      const title = payload.notification?.title || "Luxora Notification";
-      const options = {
-        body: payload.notification?.body,
-        icon: "/assets/pwa-192x192.png",
-      };
-
-      // Kiểm tra quyền và hiển thị
-      if (Notification.permission === "granted") {
-         new Notification(title, options);
-      }
-      
-      // Phát âm thanh
-      playSound();
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // --- LẮNG NGHE NOTI KHI ĐANG MỞ APP (FOREGROUND) ---
-  useEffect(() => {
-    try {
-      // Import động để tránh lỗi build nếu môi trường không hỗ trợ
-      import('firebase/messaging').then(({ getMessaging, onMessage }) => {
-        const messaging = getMessaging();
-        
-        onMessage(messaging, (payload) => {
-          console.log('🔔 Nhận tin nhắn Foreground:', payload);
-          
-          const { title, body } = payload.notification || {};
-          
-          // 1. Phát âm thanh
-          playSound();
-          
-          // 2. Ép hiển thị Popup hệ thống (Góc màn hình)
-          if (Notification.permission === "granted" && title) {
-            new Notification(title, {
-              body: body,
-              icon: '/assets/logo-192.png',
-              tag: 'luxora-alert' // Để không bị spam nhiều thông báo chồng nhau
-            });
-          }
-        });
-      });
-    } catch (err) {
-      console.log("Messaging not supported on this browser.");
-    }
-  }, []);
-  
+  // Listener cho thông báo khi đang mở app
   useEffect(() => {
     try {
       const messaging = getMessaging();
       const unsubscribe = onMessage(messaging, (payload) => {
         console.log('🔔 Nhận tin nhắn Foreground:', payload);
-        
         const { title, body, icon } = payload.notification || {};
-        
-        // Phát âm thanh
         playSound();
-
-        // ÉP HIỂN THỊ POPUP CỦA TRÌNH DUYỆT
         if (Notification.permission === "granted") {
-           // Tạo thông báo hệ thống (Góc màn hình)
            new Notification(title || "Luxora Notification", {
              body: body,
              icon: icon || '/assets/logo-192.png',
-             // Tag này giúp thông báo không bị chồng lên nhau
              tag: 'luxora-alert'
            });
         }
       });
       return () => unsubscribe();
     } catch (err) {
-      console.log("Messaging không hỗ trợ trên trình duyệt này hoặc chưa init.");
+      console.log("Messaging chưa hỗ trợ/chưa init.");
     }
   }, []);
 
@@ -239,87 +169,7 @@ const App: React.FC = () => {
     setLogs(prev => [newLog, ...prev].slice(0, 50));
   }, [selectedProjectId]);
 
-  // 👇 Sửa tham số đầu vào thành (task: Task) để lấy mọi thông tin
-  const createSystemNotification = async (task: Task) => {
-    if (!selectedProjectId) return;
-    
-    // Debug xem task nhận vào có dữ liệu không
-    console.log("🔔 Đang tạo thông báo cho Task:", task.id);
-    console.log("🔔 Preparing Notification for Task:", task);
-    console.log("   - Seeding:", task.seeding);
-    console.log("   - Content:", task.contentBody);
-    console.log("   - Image:", task.image);
-    console.log("   - Link:", task.link);
-
-    const triggerKey = `${task.id}_REVIEW_ALERT`; 
-
-    try {
-      const q = query(
-        collection(db, 'messages'),
-        where('projectId', '==', selectedProjectId),
-        where('triggerKey', '==', triggerKey)
-      );
-      const existingDocs = await getDocs(q);
-
-      if (!existingDocs.empty) return;
-
-      // 👇 NỘI DUNG TIN NHẮN CHUẨN (Tách riêng Hình và Link)
-      const messageContent = `STATUS UPDATE: [${task.id}] ${task.name} >> REVIEW_MODE_ACTIVATED
---------------------------
-📌 SEEDING CONTENT:
-${task.seeding || '(Chưa cập nhật)'}
-
-📝 MAIN CONTENT:
-${task.contentBody || '(Chưa cập nhật)'}
-
-🖼️ HÌNH ẢNH (SOURCE): 
-${task.image ? task.image : 'N/A'}
-
-🔗 LINK BÀI ĐĂNG (RESULT): 
-${task.link && task.link !== '#' ? task.link : 'N/A'}`;
-
-      // 1. Lưu vào Firestore
-      await addDoc(collection(db, 'messages'), {
-        projectId: selectedProjectId,
-        senderId: 'SYSTEM',
-        senderName: 'CORE AI',
-        senderRole: 'ADMIN',
-        text: messageContent, 
-        timestamp: new Date(),
-        type: 'NOTIFICATION',
-        triggerKey: triggerKey
-      });
-
-      // 2. Gửi Push (Giữ ngắn gọn)
-      const clientUsers = users.filter(u => 
-        u.role === 'CLIENT' && 
-        (currentProject?.clientIds || []).includes(u.id)
-      );
-
-      let targetTokens: string[] = [];
-      clientUsers.forEach(u => {
-        if (u.fcmTokens && Array.isArray(u.fcmTokens)) {
-           targetTokens = [...targetTokens, ...u.fcmTokens];
-        }
-      });
-
-      if (targetTokens.length > 0) {
-         await fetch('/api/send-fcm', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-               tokens: targetTokens,
-               title: "LUXORA PROTOCOL",
-               body: `[${task.id}] ${task.name} cần review! Chạm để xem chi tiết.`
-            })
-         });
-      }
-      
-    } catch (e) {
-      console.error("Lỗi gửi thông báo:", e);
-    }
-  };
-
+  // --- HÀM SYNC (CHỨA CẢ LOGIC LẤY DỮ LIỆU + LOGIC GỬI THÔNG BÁO) ---
   const syncWithSheet = useCallback(async (isSilent = false) => {
     if (!selectedProjectId) return;
     if (isFetchingRef.current) return;
@@ -378,9 +228,7 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
 
         const t06 = (result.tasks06 || []).map((row: any) => {
           const getValue = (keywords: string[]) => {
-            const key = Object.keys(row).find(k => 
-              keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase()))
-            );
+            const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase())));
             return key ? String(row[key]) : '';
           };
           
@@ -393,12 +241,12 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
             pillar: getValue(['pillar']),
             name: getValue(['angle']), 
             
-            // 👇 THÊM NHIỀU TỪ KHÓA HƠN ĐỂ BẮT DÍNH
-            link: getValue(['link bài đăng', 'link bài', 'link bai dang', 'link', 'bài đăng', 'url']), 
+            // 👇 KEYWORDS MẠNH MẼ ĐỂ BẮT CỘT LINK
+            link: getValue(['link bài đăng', 'link bài', 'bài đăng', 'link', 'g']), 
             
-            image: getValue(['hình', 'image', 'picture', 'ảnh']), 
+            image: getValue(['hình', 'image', 'picture', 'ảnh', 'j']), 
             seeding: getValue(['seeding', 'nội dung seeding']),
-            contentBody: getValue(['nội dung bài']),
+            contentBody: getValue(['content', 'nội dung bài']),
             
             feedbacks: [],
             tab: '06' as const
@@ -437,7 +285,7 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
          }));
       }
 
-      // --- 👇 LOGIC TRIGGER VÀ TẠO NOTIFICATION (VIẾT TRỰC TIẾP Ở ĐÂY) ---
+      // --- LOGIC TRIGGER & GỬI THÔNG BÁO ---
       if (prevTasksRef.current.length > 0) {
         const triggeredIds = new Set();
         
@@ -454,9 +302,13 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
                         triggeredIds.add(newTask.id);
                         
                         console.log("🔥 Triggering Notification for", newTask.id);
+                        // DEBUG DỮ LIỆU TRƯỚC KHI GỬI
+                        console.log("   - Link:", newTask.link);
+                        console.log("   - Image:", newTask.image);
+
                         playSound();
 
-                        // --- TẠO NỘI DUNG TIN NHẮN (Lấy trực tiếp từ newTask mới nhất) ---
+                        // TẠO NỘI DUNG TIN NHẮN
                         const messageContent = `STATUS UPDATE: [${newTask.id}] ${newTask.name} >> REVIEW_MODE_ACTIVATED
 --------------------------
 📌 SEEDING CONTENT:
@@ -468,10 +320,10 @@ ${newTask.contentBody || '(Chưa cập nhật)'}
 🖼️ HÌNH ẢNH (SOURCE): 
 ${newTask.image ? newTask.image : 'N/A'}
 
-🔗 LINK BÀI ĐĂNG: 
+🔗 LINK BÀI ĐĂNG (RESULT): 
 ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
                         
-                        // --- GỬI FIRESTORE ---
+                        // GỬI FIRESTORE
                         const triggerKey = `${newTask.id}_REVIEW_ALERT`;
                         const q = query(collection(db, 'messages'), where('projectId', '==', selectedProjectId), where('triggerKey', '==', triggerKey));
                         const existingDocs = await getDocs(q);
@@ -488,8 +340,7 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
                                 triggerKey: triggerKey
                               });
                              
-                             // --- GỬI PUSH NOTIFICATION ---
-                             // (Đoạn lọc user và fetch API giữ nguyên như cũ)
+                             // GỬI PUSH NOTIFICATION
                              const clientUsers = users.filter(u => u.role === 'CLIENT' && (currentProject?.clientIds || []).includes(u.id));
                              let targetTokens: string[] = [];
                              clientUsers.forEach(u => { if (u.fcmTokens) targetTokens.push(...u.fcmTokens); });
@@ -524,7 +375,7 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
       isFetchingRef.current = false;
       setIsLoading(false);
     }
-  }, [selectedProjectId, addLog, appConfig, currentProject, users]); 
+  }, [selectedProjectId, addLog, appConfig, currentProject, users]);
 
   useEffect(() => {
     const unsubUsers = onSnapshot(collection(db, 'users'), (snap) => setUsers(snap.docs.map(d => d.data() as User)));
@@ -544,8 +395,8 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
   const handleLogout = () => {
       setCurrentUser(null);
       setSelectedProjectId(null);
-      localStorage.removeItem('luxora_user'); // QUAN TRỌNG: Xóa bộ nhớ để không tự đăng nhập lại
-      setActiveView('dashboard'); // Reset về trang chủ
+      localStorage.removeItem('luxora_user');
+      setActiveView('dashboard');
   };
 
   const handleAction = async (action: string, taskId: string) => {
@@ -582,19 +433,14 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
             ? `/api/proxy?target=${encodeURIComponent(scriptUrl)}`
             : `/api/proxy?target=${encodeURIComponent(scriptUrl)}`;
 
-        const response = await fetch(finalUrl, {
+        await fetch(finalUrl, {
           method: 'POST',
           body: JSON.stringify({ action: 'submit_feedback', taskId: pendingFeedbackTask, feedbackContent: combinedText })
         });
-        const result = await response.json();
-        if (result.status === 'success') {
-            addLog(`FEEDBACK UPLOADED. MODULE ${pendingFeedbackTask} FLAGGED FOR REVISION.`, 'SUCCESS');
-            setPendingFeedbackTask(null);
-            setFeedbackAccumulator([]);
-        } else {
-            addLog(`SERVER ERROR: ${result.message}`, 'WARNING');
-        }
+        addLog(`FEEDBACK UPLOADED. MODULE ${pendingFeedbackTask} FLAGGED FOR REVISION.`, 'SUCCESS');
       } catch (e) { addLog('TRANSMISSION ERROR', 'WARNING'); }
+      setPendingFeedbackTask(null);
+      setFeedbackAccumulator([]);
     }
   };
 
@@ -720,7 +566,6 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
           </div>
           
           {/* 2. Bộ lọc ngày tháng (Sửa lại để hiện trên Mobile) */}
-          {/* Xóa class 'hidden', thay bằng 'flex w-full md:w-auto' */}
           <div className="flex items-center justify-between bg-[#0f1115] border border-[#00f3ff]/20 p-1 gap-2 hud-panel w-full md:w-auto rounded-sm">
              <input 
                 type="date" 
@@ -737,7 +582,7 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
              />
           </div>
 
-          {/* 3. Nút Sync cho Desktop (Giữ nguyên) */}
+          {/* 3. Nút Sync cho Desktop */}
           <button onClick={() => syncWithSheet(false)} className="hidden md:flex group relative px-6 py-2 bg-transparent overflow-hidden rounded-sm border border-[#00f3ff] text-[#00f3ff] hover:text-black transition-colors">
             <div className="absolute inset-0 w-0 bg-[#00f3ff] transition-all duration-[250ms] ease-out group-hover:w-full"></div>
             <span className="relative flex items-center gap-2 headline-font font-bold text-sm tracking-widest">
