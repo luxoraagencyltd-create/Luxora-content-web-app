@@ -15,29 +15,23 @@ import PWAPrompt from './components/PWAPrompt';
 import MobileNavbar from './components/MobileNavbar';
 import { requestNotificationPermission } from './lib/notification'; 
 import { getMessaging, onMessage } from "firebase/messaging";
+import { SDK_VERSION } from "firebase/app";
 
 const APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxFTCYBBwC2s0Cu0KQkAjnJ15P9FmQx68orggfKhUtRMiA-VP2EaXWfruOCTfEmXdDUkQ/exec";
 const NOTIFICATION_SOUND = "https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3";
 
 const HUDCard = ({ label, count, color, active, onClick }: { label: string, count: number, color: string, active: boolean, onClick: () => void }) => (
-  <button 
-    onClick={onClick} 
-    className={`p-4 relative transition-all group border border-l-4 overflow-hidden ${active ? 'bg-[#00f3ff]/10 border-[#00f3ff]' : 'bg-[#0f1115] border-[#ffffff]/10 hover:border-[#00f3ff]/50'}`}
-    style={{ borderLeftColor: color }}
-  >
+  <button onClick={onClick} className={`p-4 relative transition-all group border border-l-4 overflow-hidden ${active ? 'bg-[#00f3ff]/10 border-[#00f3ff]' : 'bg-[#0f1115] border-[#ffffff]/10 hover:border-[#00f3ff]/50'}`} style={{ borderLeftColor: color }}>
     <div className="absolute top-0 right-0 w-2 h-2 border-t border-r border-[#ffffff]/20"></div>
     <div className="flex flex-col items-start">
       <span className="code-font text-[9px] uppercase tracking-[0.2em] mb-1" style={{ color: active ? '#fff' : '#888' }}>{label}</span>
-      <span className="headline-font text-3xl font-bold tracking-wider text-white" style={{ textShadow: active ? `0 0 10px ${color}` : 'none' }}>
-        {count < 10 ? `0${count}` : count}
-      </span>
+      <span className="headline-font text-3xl font-bold tracking-wider text-white" style={{ textShadow: active ? `0 0 10px ${color}` : 'none' }}>{count < 10 ? `0${count}` : count}</span>
     </div>
     {active && <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#00f3ff]/5 to-transparent h-full w-full animate-pulse pointer-events-none"></div>}
   </button>
 );
 
 const App: React.FC = () => {
-  // State
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     const savedUser = localStorage.getItem('luxora_user');
     return savedUser ? JSON.parse(savedUser) : null;
@@ -46,9 +40,7 @@ const App: React.FC = () => {
   useEffect(() => {
     if (currentUser) {
       localStorage.setItem('luxora_user', JSON.stringify(currentUser));
-      if ('serviceWorker' in navigator) {
-         requestNotificationPermission(currentUser.id);
-      }
+      if ('serviceWorker' in navigator) { requestNotificationPermission(currentUser.id); }
     } else {
       localStorage.removeItem('luxora_user');
     }
@@ -72,52 +64,32 @@ const App: React.FC = () => {
   const [pendingFeedbackTask, setPendingFeedbackTask] = useState<string | null>(null); 
   const [feedbackAccumulator, setFeedbackAccumulator] = useState<string[]>([]); 
   
-  // Refs
   const isFetchingRef = useRef(false);
   const prevTasksRef = useRef<Task[]>([]);
 
   const currentProject = useMemo(() => projects.find(p => p.id === selectedProjectId), [projects, selectedProjectId]);
 
-  // Effects
   useEffect(() => {
     if (currentUser) {
-      if (currentUser.role === 'CLIENT') {
-        setActiveTab('06');
-      } else {
-        setActiveTab('05');
-      }
+      if (currentUser.role === 'CLIENT') { setActiveTab('06'); } else { setActiveTab('05'); }
     }
   }, [currentUser]);
 
   useEffect(() => {
     if (!selectedProjectId) { setMessages([]); return; }
-    const q = query(
-      collection(db, 'messages'),
-      where('projectId', '==', selectedProjectId),
-      orderBy('timestamp', 'asc'),
-      limit(100)
-    );
-
+    const q = query(collection(db, 'messages'), where('projectId', '==', selectedProjectId), orderBy('timestamp', 'asc'), limit(100));
     const unsubMessages = onSnapshot(q, 
       (snapshot) => {
         const msgs = snapshot.docs.map(doc => {
           const data = doc.data();
-          return {
-            ...data,
-            id: doc.id,
-            timestamp: data.timestamp?.toDate ? data.timestamp.toDate() : new Date(data.timestamp)
-          } as ReviewMessage;
+          return { ...data, id: doc.id, timestamp: data.timestamp?.toDate ? data.timestamp.toDate() : new Date(data.timestamp) } as ReviewMessage;
         });
         setMessages(msgs);
       },
       (error) => {
-        console.error("Lỗi tải tin nhắn:", error);
-        if (error.message.includes("indexes")) {
-           addLog("Cần tạo Index Firestore. Kiểm tra Console (F12).", "WARNING");
-        }
+        if (error.message.includes("indexes")) addLog("Thiếu Index Firestore. Xem Console.", "WARNING");
       }
     );
-
     return () => unsubMessages();
   }, [selectedProjectId]);
 
@@ -127,26 +99,18 @@ const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [selectedProjectId]); 
 
-  // Listener cho thông báo khi đang mở app
   useEffect(() => {
     try {
       const messaging = getMessaging();
       const unsubscribe = onMessage(messaging, (payload) => {
-        console.log('🔔 Nhận tin nhắn Foreground:', payload);
         const { title, body, icon } = payload.notification || {};
         playSound();
         if (Notification.permission === "granted") {
-           new Notification(title || "Luxora Notification", {
-             body: body,
-             icon: icon || '/assets/logo-192.png',
-             tag: 'luxora-alert'
-           });
+           new Notification(title || "Luxora", { body: body, icon: icon || '/assets/logo-192.png', tag: 'luxora-alert' });
         }
       });
       return () => unsubscribe();
-    } catch (err) {
-      console.log("Messaging chưa hỗ trợ/chưa init.");
-    }
+    } catch (err) {}
   }, []);
 
   const playSound = () => { try { new Audio(NOTIFICATION_SOUND).play().catch(() => {}); } catch (e) {} };
@@ -169,7 +133,6 @@ const App: React.FC = () => {
     setLogs(prev => [newLog, ...prev].slice(0, 50));
   }, [selectedProjectId]);
 
-  // --- HÀM SYNC (CHỨA CẢ LOGIC LẤY DỮ LIỆU + LOGIC GỬI THÔNG BÁO) ---
   const syncWithSheet = useCallback(async (isSilent = false) => {
     if (!selectedProjectId) return;
     if (isFetchingRef.current) return;
@@ -194,6 +157,7 @@ const App: React.FC = () => {
       
       let fetchedTasks: Task[] = [];
 
+      // Xử lý Task 05
       if (result.tasks05) {
         const t05 = result.tasks05.map((row: any) => {
            const getValue = (keywords: string[]) => {
@@ -220,15 +184,19 @@ const App: React.FC = () => {
         fetchedTasks = [...fetchedTasks, ...t05];
       }
       
+      // Xử lý Task 06
       if (result.tasks06) {
-        // 👇 DEBUG: In ra key của dòng đầu tiên để soi tên cột
-        if (result.tasks06.length > 0) {
-            console.log("🔍 KEYS TỪ GOOGLE SHEET (TASKS 06):", Object.keys(result.tasks06[0]));
+        // 👇 DEBUG: In ra danh sách cột để bạn kiểm tra tên cột thật sự
+        if (result.tasks06.length > 0 && !isSilent) {
+            console.log("🔍 RAW DATA KEYS (Tasks 06):", Object.keys(result.tasks06[0]));
         }
 
         const t06 = (result.tasks06 || []).map((row: any) => {
           const getValue = (keywords: string[]) => {
-            const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase())));
+            // Tìm key chứa từ khóa (ko phân biệt hoa thường)
+            const key = Object.keys(row).find(k => 
+              keywords.some(kw => k.toLowerCase().trim().includes(kw.toLowerCase()))
+            );
             return key ? String(row[key]) : '';
           };
           
@@ -241,10 +209,10 @@ const App: React.FC = () => {
             pillar: getValue(['pillar']),
             name: getValue(['angle']), 
             
-            // 👇 KEYWORDS MẠNH MẼ ĐỂ BẮT CỘT LINK
-            link: getValue(['link bài đăng', 'link bài', 'bài đăng', 'link', 'g']), 
+            // 👇 CẬP NHẬT KEYWORDS CHO LINK: Ưu tiên "link bài", "link bai" trước "link"
+            link: getValue(['link bài đăng', 'link bai dang', 'link bài', 'bài đăng', 'link', 'g']), 
             
-            image: getValue(['hình', 'image', 'picture', 'ảnh', 'j']), 
+            image: getValue(['hình', 'image', 'picture', 'j']), 
             seeding: getValue(['seeding', 'nội dung seeding']),
             contentBody: getValue(['content', 'nội dung bài']),
             
@@ -255,6 +223,7 @@ const App: React.FC = () => {
         fetchedTasks = [...fetchedTasks, ...t06];
       }
       
+      // Xử lý Issues
       if (Array.isArray(result.issues)) {
         setIssues(result.issues.map((row: Record<string, unknown>) => {
             const findValue = (keywords: string[]) => {
@@ -285,7 +254,7 @@ const App: React.FC = () => {
          }));
       }
 
-      // --- LOGIC TRIGGER & GỬI THÔNG BÁO ---
+      // --- LOGIC TRIGGER THÔNG BÁO ---
       if (prevTasksRef.current.length > 0) {
         const triggeredIds = new Set();
         
@@ -296,19 +265,17 @@ const App: React.FC = () => {
                 const oldStatus = (oldTask.status || '').toLowerCase().trim();
                 const newStatus = (newTask.status || '').toLowerCase().trim();
 
-                // Nếu chuyển sang Review
                 if (oldStatus !== 'review' && newStatus === 'review') {
                     if (!triggeredIds.has(newTask.id)) {
                         triggeredIds.add(newTask.id);
                         
                         console.log("🔥 Triggering Notification for", newTask.id);
-                        // DEBUG DỮ LIỆU TRƯỚC KHI GỬI
+                        // DEBUG: Xem dữ liệu link có lấy được không
                         console.log("   - Link:", newTask.link);
                         console.log("   - Image:", newTask.image);
 
                         playSound();
 
-                        // TẠO NỘI DUNG TIN NHẮN
                         const messageContent = `STATUS UPDATE: [${newTask.id}] ${newTask.name} >> REVIEW_MODE_ACTIVATED
 --------------------------
 📌 SEEDING CONTENT:
@@ -323,7 +290,6 @@ ${newTask.image ? newTask.image : 'N/A'}
 🔗 LINK BÀI ĐĂNG (RESULT): 
 ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
                         
-                        // GỬI FIRESTORE
                         const triggerKey = `${newTask.id}_REVIEW_ALERT`;
                         const q = query(collection(db, 'messages'), where('projectId', '==', selectedProjectId), where('triggerKey', '==', triggerKey));
                         const existingDocs = await getDocs(q);
@@ -340,7 +306,6 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
                                 triggerKey: triggerKey
                               });
                              
-                             // GỬI PUSH NOTIFICATION
                              const clientUsers = users.filter(u => u.role === 'CLIENT' && (currentProject?.clientIds || []).includes(u.id));
                              let targetTokens: string[] = [];
                              clientUsers.forEach(u => { if (u.fcmTokens) targetTokens.push(...u.fcmTokens); });
@@ -356,7 +321,6 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
                                     })
                                 });
                              }
-                             
                              addLog(`🔔 New Trigger: ${newTask.id} cần review!`, 'SUCCESS');
                         }
                     }
