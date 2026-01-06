@@ -371,9 +371,16 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
       }
       
       if (result.tasks06) {
+        // 👇 DEBUG: In ra key của dòng đầu tiên để soi tên cột
+        if (result.tasks06.length > 0) {
+            console.log("🔍 KEYS TỪ GOOGLE SHEET (TASKS 06):", Object.keys(result.tasks06[0]));
+        }
+
         const t06 = (result.tasks06 || []).map((row: any) => {
           const getValue = (keywords: string[]) => {
-            const key = Object.keys(row).find(k => keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase())));
+            const key = Object.keys(row).find(k => 
+              keywords.some(kw => k.toLowerCase().includes(kw.toLowerCase()))
+            );
             return key ? String(row[key]) : '';
           };
           
@@ -386,11 +393,12 @@ ${task.link && task.link !== '#' ? task.link : 'N/A'}`;
             pillar: getValue(['pillar']),
             name: getValue(['angle']), 
             
-            // 👇 QUAN TRỌNG: Mapping Link và Image
-            link: getValue(['link bài đăng', 'link', 'g']), 
-            image: getValue(['hình', 'image', 'j']), 
+            // 👇 THÊM NHIỀU TỪ KHÓA HƠN ĐỂ BẮT DÍNH
+            link: getValue(['link bài đăng', 'link bài', 'link bai dang', 'link', 'bài đăng', 'url']), 
+            
+            image: getValue(['hình', 'image', 'picture', 'ảnh']), 
             seeding: getValue(['seeding', 'nội dung seeding']),
-            contentBody: getValue(['content', 'nội dung bài']),
+            contentBody: getValue(['nội dung bài']),
             
             feedbacks: [],
             tab: '06' as const
