@@ -131,7 +131,7 @@ const App: React.FC = () => {
     const newLog: LogEntry = { id: Math.random().toString(), projectId: selectedProjectId || 'SYSTEM', timestamp: new Date(), event, type };
     setLogs(prev => [newLog, ...prev].slice(0, 50));
   }, [selectedProjectId]);
-
+  
   const syncWithSheet = useCallback(async (isSilent = false) => {
     if (!selectedProjectId) return;
     if (isFetchingRef.current) return;
@@ -156,7 +156,7 @@ const App: React.FC = () => {
       
       let fetchedTasks: Task[] = [];
 
-      // Xử lý Task 05
+      // MAPPING DATA 05
       if (result.tasks05) {
         const t05 = result.tasks05.map((row: any) => {
            const getValue = (keywords: string[]) => {
@@ -183,22 +183,16 @@ const App: React.FC = () => {
         fetchedTasks = [...fetchedTasks, ...t05];
       }
       
-      // Xử lý Task 06
-
+      // MAPPING DATA 06 (Dữ liệu quan trọng: Link, Hình, Content)
       if (result.tasks06) {
-        // 👇 DEBUG: In ra key của dòng đầu tiên để soi tên cột
-        if (result.tasks06.length > 0) {
-            console.log("🔍 REAL SHEET COLUMNS:", Object.keys(result.tasks06[0]));
-        }
+        // Log tên cột để debug nếu cần
+        if (result.tasks06.length > 0 && !isSilent) console.log("🔍 REAL SHEET COLUMNS:", Object.keys(result.tasks06[0]));
 
         const t06 = (result.tasks06 || []).map((row: any) => {
-          // Hàm tìm giá trị "chấp hết" mọi thể loại tên cột
           const getValue = (keywords: string[]) => {
-            const key = Object.keys(row).find(k => {
-               // Chuyển hết về chữ thường + xóa xuống dòng + xóa khoảng trắng thừa
-               const normalizedKey = k.toLowerCase().replace(/\n/g, ' ').replace(/\s+/g, ' ').trim();
-               return keywords.some(kw => normalizedKey.includes(kw.toLowerCase()));
-            });
+            const key = Object.keys(row).find(k => 
+              keywords.some(kw => k.toLowerCase().replace(/\n/g, ' ').trim().includes(kw.toLowerCase()))
+            );
             return key ? String(row[key]) : '';
           };
           
@@ -211,10 +205,9 @@ const App: React.FC = () => {
             pillar: getValue(['pillar']),
             name: getValue(['angle']), 
             
-            // 👇 THÊM TỪ KHÓA MỚI MẠNH MẼ HƠN
-            link: getValue(['link bài đăng', 'link', 'bài đăng', 'url', 'g']), 
-            
-            image: getValue(['hình', 'image', 'picture', 'j']), 
+            // Lấy Link và Hình (Dựa trên log console của bạn: 'Link bài đăng', 'Hình')
+            link: getValue(['link bài đăng', 'link', 'g']), 
+            image: getValue(['hình', 'image', 'j']), 
             seeding: getValue(['seeding', 'nội dung seeding']),
             contentBody: getValue(['content', 'nội dung bài']),
             
@@ -225,7 +218,7 @@ const App: React.FC = () => {
         fetchedTasks = [...fetchedTasks, ...t06];
       }
       
-      // Xử lý Issues
+      // Mapping Issues (Giữ nguyên)
       if (Array.isArray(result.issues)) {
         setIssues(result.issues.map((row: Record<string, unknown>) => {
             const findValue = (keywords: string[]) => {
@@ -256,7 +249,7 @@ const App: React.FC = () => {
          }));
       }
 
-      // --- LOGIC TRIGGER THÔNG BÁO ---
+      // --- 👇 LOGIC TRIGGER MỚI (THÔNG MINH HƠN) 👇 ---
       if (prevTasksRef.current.length > 0) {
         const triggeredIds = new Set();
         
@@ -267,32 +260,42 @@ const App: React.FC = () => {
                 const oldStatus = (oldTask.status || '').toLowerCase().trim();
                 const newStatus = (newTask.status || '').toLowerCase().trim();
 
+                // Điều kiện: Chuyển sang Review
                 if (oldStatus !== 'review' && newStatus === 'review') {
                     if (!triggeredIds.has(newTask.id)) {
                         triggeredIds.add(newTask.id);
                         
-                        console.log("🔥 Triggering Notification for", newTask.id);
-                        // DEBUG: Xem dữ liệu link có lấy được không
-                        console.log("   - Link:", newTask.link);
-                        console.log("   - Image:", newTask.image);
+                        console.log("🔥 Trigger detected for", newTask.id);
 
+                        // 👇 BƯỚC QUAN TRỌNG: TÌM PHIÊN BẢN GIÀU DỮ LIỆU NHẤT
+                        // Tìm trong fetchedTasks xem có bản nào của Task ID này mà có Link hoặc Content không
+                        // (Thường là bản ghi từ Tab 06)
+                        const richTask = fetchedTasks.find(t => 
+                           t.id === newTask.id && (t.link || t.contentBody || t.seeding)
+                        ) || newTask; // Nếu không có thì dùng tạm bản hiện tại
+                        
+                        console.log("   - Using Data Source:", richTask.tab);
+                        console.log("   - Link:", richTask.link);
+                        
                         playSound();
 
-                        const messageContent = `STATUS UPDATE: [${newTask.id}] ${newTask.name} >> REVIEW_MODE_ACTIVATED
+                        // 👇 TẠO THÔNG BÁO TỪ richTask (Thay vì newTask)
+                        const messageContent = `STATUS UPDATE: [${richTask.id}] ${richTask.name} >> REVIEW_MODE_ACTIVATED
 --------------------------
 📌 SEEDING CONTENT:
-${newTask.seeding || '(Chưa cập nhật)'}
+${richTask.seeding || '(Chưa cập nhật)'}
 
 📝 MAIN CONTENT:
-${newTask.contentBody || '(Chưa cập nhật)'}
+${richTask.contentBody || '(Chưa cập nhật)'}
 
 🖼️ HÌNH ẢNH (SOURCE): 
-${newTask.image ? newTask.image : 'N/A'}
+${richTask.image ? richTask.image : 'N/A'}
 
 🔗 LINK BÀI ĐĂNG (RESULT): 
-${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
+${richTask.link && richTask.link !== '#' ? richTask.link : 'N/A'}`;
                         
-                        const triggerKey = `${newTask.id}_REVIEW_ALERT`;
+                        // GỬI FIREBASE
+                        const triggerKey = `${richTask.id}_REVIEW_ALERT`;
                         const q = query(collection(db, 'messages'), where('projectId', '==', selectedProjectId), where('triggerKey', '==', triggerKey));
                         const existingDocs = await getDocs(q);
                         
@@ -308,6 +311,7 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
                                 triggerKey: triggerKey
                               });
                              
+                             // GỬI PUSH
                              const clientUsers = users.filter(u => u.role === 'CLIENT' && (currentProject?.clientIds || []).includes(u.id));
                              let targetTokens: string[] = [];
                              clientUsers.forEach(u => { if (u.fcmTokens) targetTokens.push(...u.fcmTokens); });
@@ -319,11 +323,12 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
                                     body: JSON.stringify({
                                        tokens: targetTokens,
                                        title: "LUXORA PROTOCOL",
-                                       body: `[${newTask.id}] ${newTask.name} cần review!`
+                                       body: `[${richTask.id}] ${richTask.name} cần review!`
                                     })
                                 });
                              }
-                             addLog(`🔔 New Trigger: ${newTask.id} cần review!`, 'SUCCESS');
+                             
+                             addLog(`🔔 Alert sent for ${richTask.id}`, 'SUCCESS');
                         }
                     }
                 }
@@ -334,9 +339,9 @@ ${newTask.link && newTask.link !== '#' ? newTask.link : 'N/A'}`;
       setTasks(fetchedTasks);
       prevTasksRef.current = fetchedTasks;
 
-      if (!isSilent) addLog("DATA SYNC COMPLETE. SYSTEM UPDATED.", "SUCCESS");
+      if (!isSilent) addLog("DATA SYNC COMPLETE.", "SUCCESS");
     } catch (error) {
-      if (!isSilent) addLog("CONNECTION LOST. RETRYING...", "WARNING");
+      if (!isSilent) addLog("CONNECTION LOST.", "WARNING");
     } finally {
       isFetchingRef.current = false;
       setIsLoading(false);
