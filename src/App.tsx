@@ -185,39 +185,37 @@ const App: React.FC = () => {
       
       // MAPPING DATA 06 (Dữ liệu quan trọng: Link, Hình, Content)
       if (result.tasks06) {
-        // Log tên cột để kiểm tra nếu cần
-        // if (result.tasks06.length > 0) console.log("🔍 KEYS:", Object.keys(result.tasks06[0]));
+        // Log để kiểm tra
+        if (result.tasks06.length > 0) console.log("🔍 REAL COLUMNS:", Object.keys(result.tasks06[0]));
 
         const t06 = (result.tasks06 || []).map((row: any) => {
-          const getValue = (keywords: string[]) => {
-            const key = Object.keys(row).find(k => 
-              keywords.some(kw => k.toLowerCase().replace(/\n/g, ' ').trim() === kw.toLowerCase()) || // Ưu tiên khớp chính xác 100%
-              keywords.some(kw => k.toLowerCase().replace(/\n/g, ' ').trim().includes(kw.toLowerCase())) // Sau đó mới tìm chứa
-            );
-            return key ? String(row[key]) : '';
-          };
           
+          // Hàm lấy giá trị siêu đơn giản (Direct Access)
+          // Ưu tiên tìm đúng tên cột như trong Console
+          const get = (key: string) => {
+             // Thử lấy chính xác
+             if (row[key] !== undefined) return String(row[key]);
+             // Thử lấy chữ thường
+             const lowerKey = key.toLowerCase();
+             const foundKey = Object.keys(row).find(k => k.toLowerCase().trim() === lowerKey);
+             return foundKey ? String(row[foundKey]) : '';
+          };
+
           return {
-            id: String(getValue(['id task', 'id'])),
+            id: get('ID task'),
             projectId: selectedProjectId,
-            phase: getValue(['dạng content', 'phase']), 
-            planEnd: getValue(['thời gian đăng', 'plan end']),
-            status: getValue(['status', 'trạng thái']) || 'To do',
-            pillar: getValue(['pillar']),
-            name: getValue(['angle']), 
+            phase: get('Dạng content'), 
+            planEnd: get('Thời gian đăng'),
+            status: get('Status') || 'To do',
+            pillar: get('Pillar'),
+            name: get('Angle'), 
             
-            // 👇 SỬA QUAN TRỌNG: Đặt từ khóa thật cụ thể để không bị nhầm
-            // Cột G: "Link bài đăng"
-            link: getValue(['link bài đăng', 'link bài']), 
+            // 👇 GỌI ĐÚNG TÊN CỘT TRONG CONSOLE (Case-insensitive)
+            link: get('Link bài đăng'), 
             
-            // Cột H: "Nội dung seeding" (Tránh nhầm với link)
-            seeding: getValue(['nội dung seeding', 'seeding']),
-            
-            // Cột I: "Nội dung bài"
-            contentBody: getValue(['nội dung bài', 'content']),
-            
-            // Cột J: "Hình"
-            image: getValue(['hình', 'image']), 
+            image: get('Hình'), 
+            seeding: get('Nội dung seeding'),
+            contentBody: get('Nội dung bài'),
             
             feedbacks: [],
             tab: '06' as const
