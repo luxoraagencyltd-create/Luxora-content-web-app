@@ -185,31 +185,39 @@ const App: React.FC = () => {
       
       // MAPPING DATA 06 (Dữ liệu quan trọng: Link, Hình, Content)
       if (result.tasks06) {
-        // Log tên cột để debug nếu cần
-        if (result.tasks06.length > 0 && !isSilent) console.log("🔍 REAL SHEET COLUMNS:", Object.keys(result.tasks06[0]));
+        // Log tên cột để kiểm tra nếu cần
+        // if (result.tasks06.length > 0) console.log("🔍 KEYS:", Object.keys(result.tasks06[0]));
 
         const t06 = (result.tasks06 || []).map((row: any) => {
           const getValue = (keywords: string[]) => {
             const key = Object.keys(row).find(k => 
-              keywords.some(kw => k.toLowerCase().replace(/\n/g, ' ').trim().includes(kw.toLowerCase()))
+              keywords.some(kw => k.toLowerCase().replace(/\n/g, ' ').trim() === kw.toLowerCase()) || // Ưu tiên khớp chính xác 100%
+              keywords.some(kw => k.toLowerCase().replace(/\n/g, ' ').trim().includes(kw.toLowerCase())) // Sau đó mới tìm chứa
             );
             return key ? String(row[key]) : '';
           };
           
           return {
-            id: String(getValue(['id', 'id task'])),
+            id: String(getValue(['id task', 'id'])),
             projectId: selectedProjectId,
-            phase: getValue(['phase', 'dạng content']), 
-            planEnd: getValue(['plan end', 'thời gian đăng']),
+            phase: getValue(['dạng content', 'phase']), 
+            planEnd: getValue(['thời gian đăng', 'plan end']),
             status: getValue(['status', 'trạng thái']) || 'To do',
             pillar: getValue(['pillar']),
             name: getValue(['angle']), 
             
-            // Lấy Link và Hình (Dựa trên log console của bạn: 'Link bài đăng', 'Hình')
-            link: getValue(['link bài đăng', 'link', 'g']), 
-            image: getValue(['hình', 'image', 'j']), 
-            seeding: getValue(['seeding', 'nội dung seeding']),
-            contentBody: getValue(['content', 'nội dung bài']),
+            // 👇 SỬA QUAN TRỌNG: Đặt từ khóa thật cụ thể để không bị nhầm
+            // Cột G: "Link bài đăng"
+            link: getValue(['link bài đăng', 'link bài']), 
+            
+            // Cột H: "Nội dung seeding" (Tránh nhầm với link)
+            seeding: getValue(['nội dung seeding', 'seeding']),
+            
+            // Cột I: "Nội dung bài"
+            contentBody: getValue(['nội dung bài', 'content']),
+            
+            // Cột J: "Hình"
+            image: getValue(['hình', 'image']), 
             
             feedbacks: [],
             tab: '06' as const
