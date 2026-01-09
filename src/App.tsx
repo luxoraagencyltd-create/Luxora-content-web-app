@@ -185,21 +185,27 @@ const App: React.FC = () => {
       
       // MAPPING DATA 06 (Dữ liệu quan trọng: Link, Hình, Content)
       if (result.tasks06) {
-        // Log để kiểm tra
-        if (result.tasks06.length > 0) console.log("🔍 REAL COLUMNS:", Object.keys(result.tasks06[0]));
-
-        const t06 = (result.tasks06 || []).map((row: any) => {
+        const t06 = (result.tasks06 || []).map((row: any, index: number) => {
           
-          // Hàm lấy giá trị siêu đơn giản (Direct Access)
-          // Ưu tiên tìm đúng tên cột như trong Console
-          const get = (key: string) => {
-             // Thử lấy chính xác
-             if (row[key] !== undefined) return String(row[key]);
-             // Thử lấy chữ thường
-             const lowerKey = key.toLowerCase();
-             const foundKey = Object.keys(row).find(k => k.toLowerCase().trim() === lowerKey);
+          // Hàm lấy giá trị (Thử mọi cách)
+          const get = (targetKey: string) => {
+             // 1. Tìm chính xác
+             if (row[targetKey] !== undefined) return String(row[targetKey]);
+             
+             // 2. Tìm gần đúng (bỏ khoảng trắng, chữ thường)
+             const foundKey = Object.keys(row).find(k => 
+                k.toLowerCase().trim() === targetKey.toLowerCase().trim()
+             );
              return foundKey ? String(row[foundKey]) : '';
           };
+
+          const linkVal = get('Link bài đăng');
+          const imgVal = get('Hình');
+          
+          // 👇 DEBUG: In ra 3 dòng đầu tiên để kiểm tra
+          if (index < 3) {
+             console.log(`Row ${index}: Link="${linkVal}", Img="${imgVal}"`);
+          }
 
           return {
             id: get('ID task'),
@@ -210,13 +216,12 @@ const App: React.FC = () => {
             pillar: get('Pillar'),
             name: get('Angle'), 
             
-            // 👇 GỌI ĐÚNG TÊN CỘT TRONG CONSOLE (Case-insensitive)
-            link: get('Link bài đăng'), 
+            // Gán giá trị đã lấy được
+            link: linkVal, 
+            image: imgVal, 
             
-            image: get('Hình'), 
             seeding: get('Nội dung seeding'),
             contentBody: get('Nội dung bài'),
-            
             feedbacks: [],
             tab: '06' as const
           };
